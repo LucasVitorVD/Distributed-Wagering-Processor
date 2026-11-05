@@ -1,6 +1,6 @@
 import { Decimal } from "decimal.js";
 
-export type Currency = "BRL" | "USD" | "EUR";
+export type Currency = string;
 
 export class InvalidMoneyError extends Error {
   public readonly code = "INVALID_MONEY";

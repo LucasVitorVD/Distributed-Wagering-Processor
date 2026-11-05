@@ -1,5 +1,5 @@
-import { ReflectMetadataProvider } from '@mikro-orm/decorators/legacy';
-import { defineConfig, PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { ReflectMetadataProvider, defineConfig } from '@mikro-orm/core';
+import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 
 export default defineConfig({
   dbName: process.env.POSTGRES_DB ?? 'wagering',
