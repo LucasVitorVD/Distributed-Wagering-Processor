@@ -26,12 +26,6 @@ export type CreateLedgerEntryProps = {
   createdAt: Date;
 };
 
-/**
- * Lançamento imutável do ledger de uma carteira.
- *
- * Sem campos mutáveis e sem métodos de transição: a imutabilidade é
- * estrutural. `create` valida que balanceBefore ± money === balanceAfter.
- */
 @Entity()
 export class WalletLedgerEntry {
   @PrimaryKey({ type: 'uuid' })
@@ -127,9 +121,6 @@ export class WalletLedgerEntry {
     });
   }
 
-  /**
-   * Verifica balanceBefore ± money === balanceAfter.
-   */
   isBalanced(): boolean {
     const expected =
       this.direction === 'DEBIT'

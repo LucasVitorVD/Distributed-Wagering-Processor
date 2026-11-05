@@ -18,18 +18,6 @@ export type BalanceChangeResult = {
   referenceTransactionId: string | undefined;
 };
 
-/**
- * Aggregate Root da carteira do jogador.
- *
- * O saldo é persistido em duas colunas (`balance_amount`, `balance_currency`)
- * para evitar dependência de tipos monetários do ORM. O `Money` é reconstruído
- * a partir delas via getter.
- *
- * Todas as mudanças de saldo passam por `debit`/`credit`, que garantem:
- * - moeda compatível com a carteira
- * - saldo nunca negativo
- * - version incrementado somente quando o saldo muda
- */
 @Entity()
 export class Wallet {
   @PrimaryKey({ type: 'uuid' })
@@ -56,7 +44,6 @@ export class Wallet {
   @Property({ type: 'timestamptz', onUpdate: () => new Date() })
   public updatedAt!: Date;
 
-  /** Não persistido: derivado de balanceAmount + balanceCurrency. */
   public get balance(): Money {
     return Money.rehydrate(this.balanceAmount, this.balanceCurrency);
   }
@@ -81,9 +68,6 @@ export class Wallet {
     this.updatedAt = updatedAt;
   }
 
-  /**
-   * Cria uma nova carteira. Nasce com version = 1.
-   */
   static open(props: {
     id: string;
     playerId: string;
@@ -103,9 +87,6 @@ export class Wallet {
     );
   }
 
-  /**
-   * Reconstrução a partir da persistência. Não revalida transições de negócio.
-   */
   static rehydrate(state: {
     id: string;
     playerId: string;
@@ -134,10 +115,6 @@ export class Wallet {
     }
   }
 
-  /**
-   * Débito na carteira. Lança se a moeda não bater ou se o saldo ficar negativo.
-   * Retorna o resultado da mudança de saldo (para o ledger ser criado pelo use case).
-   */
   debit(amount: Money, referenceTransactionId?: string): BalanceChangeResult {
     this.assertSameCurrency(amount);
 
@@ -162,9 +139,6 @@ export class Wallet {
     };
   }
 
-  /**
-   * Crédito na carteira. Lança se a moeda não bater.
-   */
   credit(amount: Money, referenceTransactionId?: string): BalanceChangeResult {
     this.assertSameCurrency(amount);
 
