@@ -1,6 +1,12 @@
 import { Entity } from "@mikro-orm/core";
 import { type Currency, Money } from "../shared/money.js";
 import { PrimaryKey, Property } from "@mikro-orm/core";
+import {
+  NegativeBalanceError,
+  WalletCurrencyMismatchError,
+  InvalidAmountError,
+  InvalidInitialBalanceError,
+} from "../shared/errors.js";
 
 interface WalletProps {
   id: string;
@@ -41,7 +47,7 @@ export class Wallet {
 
   static open(props: WalletProps): Wallet {
     if (props.initialBalance.isNegative()) {
-      throw new Error("Initial balance cannot be negative");
+      throw new InvalidInitialBalanceError();
     }
 
     return new Wallet(
@@ -54,11 +60,11 @@ export class Wallet {
 
   credit(amount: Money): Money {
     if (!amount.isPositive()) {
-      throw new Error("Amount must be positive");
+      throw new InvalidAmountError();
     }
 
     if (this.balanceCurrency !== amount.currency) {
-      throw new Error("Currency mismatch");
+      throw new WalletCurrencyMismatchError(this.balanceCurrency, amount.currency);
     }
 
     const newBalance = this.balance.add(amount);
@@ -70,17 +76,17 @@ export class Wallet {
 
   debit(amount: Money): Money {
     if (!amount.isPositive()) {
-      throw new Error("Amount must be positive");
+      throw new InvalidAmountError();
     }
 
     if (this.balanceCurrency !== amount.currency) {
-      throw new Error("Currency mismatch");
+      throw new WalletCurrencyMismatchError(this.balanceCurrency, amount.currency);
     }
 
     const currentBalance = this.balance;
 
     if (currentBalance.isLessThan(amount)) {
-      throw new Error("Insufficient balance");
+      throw new NegativeBalanceError(this.id);
     }
 
     const newBalance = currentBalance.subtract(amount);
