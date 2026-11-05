@@ -1,25 +1,51 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
-import { Money } from '../shared/money.js';
+
+import {
+  Entity,
+  ManyToOne,
+  PrimaryKey,
+  Property,
+  type Rel,
+} from "@mikro-orm/core";
+
+import { type Currency, Money } from "../shared/money.js";
+import {
+  InvalidLedgerAmountError,
+  LedgerCurrencyMismatchError,
+  NegativeLedgerBalanceError,
+  UnbalancedLedgerEntryError,
+} from "../shared/errors.js";
+import { Wallet } from "../wallet/wallet.entity.js";
+
+export type LedgerEntryDirection = "DEBIT" | "CREDIT";
+
+export type LedgerEntryType =
+  | "BET"
+  | "WIN"
+  | "LOSS"
+  | "REFUND"
+  | "ROLLBACK";
 
 export type LedgerEntryState = {
   id: string;
   walletId: string;
   transactionId: string;
-  direction: 'DEBIT' | 'CREDIT';
+  type: LedgerEntryType;
+  direction: LedgerEntryDirection;
   moneyAmount: string;
-  moneyCurrency: string;
+  moneyCurrency: Currency;
   balanceBeforeAmount: string;
-  balanceBeforeCurrency: string;
+  balanceBeforeCurrency: Currency;
   balanceAfterAmount: string;
-  balanceAfterCurrency: string;
+  balanceAfterCurrency: Currency;
   createdAt: Date;
 };
 
 export type CreateLedgerEntryProps = {
   id: string;
-  walletId: string;
+  wallet: Rel<Wallet>;
   transactionId: string;
-  direction: 'DEBIT' | 'CREDIT';
+  type: LedgerEntryType;
+  direction: LedgerEntryDirection;
   money: Money;
   balanceBefore: Money;
   balanceAfter: Money;
@@ -28,87 +54,110 @@ export type CreateLedgerEntryProps = {
 
 @Entity()
 export class WalletLedgerEntry {
-  @PrimaryKey({ type: 'uuid' })
+  @PrimaryKey({ type: "uuid" })
   public readonly id!: string;
 
-  @Property({ type: 'text' })
-  public walletId!: string;
+  @ManyToOne(() => Wallet)
+  public readonly wallet!: Rel<Wallet>;
 
-  @Property({ type: 'text' })
-  public transactionId!: string;
+  @Property({ type: "text" })
+  public readonly transactionId!: string;
 
-  @Property({ type: 'varchar', length: 10 })
-  public direction!: 'DEBIT' | 'CREDIT';
+  @Property({ columnType: "varchar(10)" })
+  public readonly type!: LedgerEntryType;
 
-  @Property({ type: 'text', columnType: 'text' })
-  public moneyAmount!: string;
+  @Property({ columnType: "varchar(10)" })
+  public readonly direction!: LedgerEntryDirection;
 
-  @Property({ type: 'varchar', length: 3 })
-  public moneyCurrency!: string;
+  @Property({ columnType: "numeric(18,2)" })
+  public readonly moneyAmount!: string;
 
-  @Property({ type: 'text', columnType: 'text' })
-  public balanceBeforeAmount!: string;
+  @Property({ columnType: "varchar(3)" })
+  public readonly moneyCurrency!: Currency;
 
-  @Property({ type: 'varchar', length: 3 })
-  public balanceBeforeCurrency!: string;
+  @Property({ columnType: "numeric(18,2)" })
+  public readonly balanceBeforeAmount!: string;
 
-  @Property({ type: 'text', columnType: 'text' })
-  public balanceAfterAmount!: string;
+  @Property({ columnType: "varchar(3)" })
+  public readonly balanceBeforeCurrency!: Currency;
 
-  @Property({ type: 'varchar', length: 3 })
-  public balanceAfterCurrency!: string;
+  @Property({ columnType: "numeric(18,2)" })
+  public readonly balanceAfterAmount!: string;
 
-  @Property({ type: 'timestamptz' })
-  public createdAt!: Date;
+  @Property({ columnType: "varchar(3)" })
+  public readonly balanceAfterCurrency!: Currency;
 
-  public get money(): Money {
-    return Money.rehydrate(this.moneyAmount, this.moneyCurrency);
-  }
-
-  public get balanceBefore(): Money {
-    return Money.rehydrate(
-      this.balanceBeforeAmount,
-      this.balanceBeforeCurrency,
-    );
-  }
-
-  public get balanceAfter(): Money {
-    return Money.rehydrate(this.balanceAfterAmount, this.balanceAfterCurrency);
-  }
+  @Property({ columnType: "timestamptz" })
+  public readonly createdAt!: Date;
 
   private constructor(props: CreateLedgerEntryProps) {
     this.id = props.id;
-    this.walletId = props.walletId;
+    this.wallet = props.wallet;
     this.transactionId = props.transactionId;
+    this.type = props.type;
     this.direction = props.direction;
+
     this.moneyAmount = props.money.toJSON().amount;
     this.moneyCurrency = props.money.currency;
+
     this.balanceBeforeAmount = props.balanceBefore.toJSON().amount;
     this.balanceBeforeCurrency = props.balanceBefore.currency;
+
     this.balanceAfterAmount = props.balanceAfter.toJSON().amount;
     this.balanceAfterCurrency = props.balanceAfter.currency;
+
     this.createdAt = props.createdAt;
   }
 
   static create(props: CreateLedgerEntryProps): WalletLedgerEntry {
-    const entry = new WalletLedgerEntry(props);
-    if (!entry.isBalanced()) {
-      throw new Error(
-        `Ledger entry desbalanceado: balanceBefore ${props.balanceBefore.toString()} ` +
-          `${props.direction === 'DEBIT' ? '-' : '+'} money ${props.money.toString()} ` +
-          `!= balanceAfter ${props.balanceAfter.toString()}`,
+    if (!props.money.isPositive() || props.money.isZero()) {
+      throw new InvalidLedgerAmountError();
+    }
+
+    if (
+      props.money.currency !== props.balanceBefore.currency ||
+      props.money.currency !== props.balanceAfter.currency
+    ) {
+      const balanceCurrency =
+        props.money.currency !== props.balanceBefore.currency
+          ? props.balanceBefore.currency
+          : props.balanceAfter.currency;
+      throw new LedgerCurrencyMismatchError(
+        balanceCurrency,
+        props.money.currency,
       );
     }
+
+    if (
+      props.balanceBefore.isNegative() ||
+      props.balanceAfter.isNegative()
+    ) {
+      throw new NegativeLedgerBalanceError();
+    }
+
+    const entry = new WalletLedgerEntry(props);
+
+    if (!entry.isBalanced()) {
+      throw new UnbalancedLedgerEntryError();
+    }
+
     return entry;
   }
 
-  static rehydrate(state: LedgerEntryState): WalletLedgerEntry {
+  static rehydrate(
+    state: LedgerEntryState,
+    wallet: Rel<Wallet>,
+  ): WalletLedgerEntry {
     return new WalletLedgerEntry({
       id: state.id,
-      walletId: state.walletId,
+      wallet,
       transactionId: state.transactionId,
+      type: state.type,
       direction: state.direction,
-      money: Money.rehydrate(state.moneyAmount, state.moneyCurrency),
+      money: Money.rehydrate(
+        state.moneyAmount,
+        state.moneyCurrency,
+      ),
       balanceBefore: Money.rehydrate(
         state.balanceBeforeAmount,
         state.balanceBeforeCurrency,
@@ -123,9 +172,31 @@ export class WalletLedgerEntry {
 
   isBalanced(): boolean {
     const expected =
-      this.direction === 'DEBIT'
+      this.direction === "DEBIT"
         ? this.balanceBefore.subtract(this.money)
         : this.balanceBefore.add(this.money);
+
     return expected.equals(this.balanceAfter);
+  }
+
+  get money(): Money {
+    return Money.rehydrate(
+      this.moneyAmount,
+      this.moneyCurrency,
+    );
+  }
+
+  get balanceBefore(): Money {
+    return Money.rehydrate(
+      this.balanceBeforeAmount,
+      this.balanceBeforeCurrency,
+    );
+  }
+
+  get balanceAfter(): Money {
+    return Money.rehydrate(
+      this.balanceAfterAmount,
+      this.balanceAfterCurrency,
+    );
   }
 }

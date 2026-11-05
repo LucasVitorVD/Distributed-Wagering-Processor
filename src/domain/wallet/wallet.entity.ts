@@ -8,7 +8,7 @@ import {
   InvalidInitialBalanceError,
 } from "../shared/errors.js";
 
-interface WalletProps {
+interface OpenWalletProps {
   id: string;
   playerId: string;
   initialBalance: Money;
@@ -30,12 +30,12 @@ export class Wallet {
   public readonly balanceCurrency!: Currency
 
   @Property({ version: true })
-  private _version: number
+  private _version!: number
 
-  @Property({ columnType: "timestamp", onCreate: () => new Date() })
+  @Property({ columnType: "timestamptz", onCreate: () => new Date() })
   public readonly _createdAt!: Date
 
-  @Property({ columnType: "timestamp", onCreate: () => new Date(), onUpdate: () => new Date() })
+  @Property({ columnType: "timestamptz", onCreate: () => new Date(), onUpdate: () => new Date() })
   private _updatedAt!: Date
 
   private constructor(id: string, playerId: string, balanceAmount: string, balanceCurrency: Currency) {
@@ -45,7 +45,7 @@ export class Wallet {
     this.balanceCurrency = balanceCurrency;
   }
 
-  static open(props: WalletProps): Wallet {
+  static open(props: OpenWalletProps): Wallet {
     if (props.initialBalance.isNegative()) {
       throw new InvalidInitialBalanceError();
     }

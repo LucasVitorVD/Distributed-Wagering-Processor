@@ -3,7 +3,7 @@ export class DomainError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = "DomainError";
+    this.name = new.target.name;
     this.code = code;
   }
 }
@@ -47,5 +47,32 @@ export class InvalidTransactionStateError extends DomainError {
       "INVALID_TRANSACTION_STATE",
       `Transação ${transactionId} não pode passar de ${from} para ${to}`,
     );
+  }
+}
+
+export class InvalidLedgerAmountError extends DomainError {
+  constructor() {
+    super("INVALID_LEDGER_AMOUNT", "O valor do lançamento deve ser positivo");
+  }
+}
+
+export class LedgerCurrencyMismatchError extends DomainError {
+  constructor(walletCurrency: string, operationCurrency: string) {
+    super(
+      "LEDGER_CURRENCY_MISMATCH",
+      `Moeda do lançamento (${operationCurrency}) difere da moeda do saldo (${walletCurrency})`,
+    );
+  }
+}
+
+export class NegativeLedgerBalanceError extends DomainError {
+  constructor() {
+    super("NEGATIVE_LEDGER_BALANCE", "Saldo do lançamento não pode ser negativo");
+  }
+}
+
+export class UnbalancedLedgerEntryError extends DomainError {
+  constructor() {
+    super("UNBALANCED_LEDGER_ENTRY", "Lançamento do ledger não está balanceado");
   }
 }
