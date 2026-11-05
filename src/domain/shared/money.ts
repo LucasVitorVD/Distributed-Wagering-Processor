@@ -87,10 +87,6 @@ export class Money {
     return new Money(new Decimal(0), currency);
   }
 
-  /**
-   * Rehidrata um Money já persistido. Valida integridade dos dados do banco,
-   * mas permite valores negativos (ex.: saldo zerado após operações intermediárias).
-   */
   static rehydrate(amount: string, currency: string): Money {
     if (typeof amount !== "string" || amount.trim() === "") {
       throw new InvalidMoneyError(amount, "string vazia ou não é uma string");
