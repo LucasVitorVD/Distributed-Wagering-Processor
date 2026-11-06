@@ -1,4 +1,10 @@
-import { Collection, Entity, OneToMany } from "@mikro-orm/core";
+import {
+  Check,
+  Collection,
+  Entity,
+  OneToMany,
+  Unique,
+} from "@mikro-orm/core";
 import { type Currency, Money } from "../shared/money.js";
 import { PrimaryKey, Property } from "@mikro-orm/core";
 import {
@@ -16,7 +22,15 @@ interface OpenWalletProps {
   initialBalance: Money;
 }
 
-@Entity()
+@Entity({ tableName: "wallets" })
+@Unique({
+  name: "uq_wallets_player_currency",
+  properties: ["playerId", "balanceCurrency"],
+})
+@Check({
+  name: "chk_wallets_balance_non_negative",
+  expression: (columns) => `${columns.balanceAmount} >= 0`,
+})
 export class Wallet {
 
   @PrimaryKey({ columnType: "uuid" })
@@ -28,16 +42,25 @@ export class Wallet {
   @Property({ columnType: "numeric(18, 2)" })
   private balanceAmount!: string
 
-  @Property({ columnType: "varchar", length: 3 })
+  @Property({ columnType: "varchar(3)" })
   public readonly balanceCurrency!: Currency
 
-  @Property({ version: true })
+  @Property({ version: true, fieldName: "version" })
   private _version!: number
 
-  @Property({ columnType: "timestamptz", onCreate: () => new Date() })
+  @Property({
+    columnType: "timestamptz",
+    fieldName: "created_at",
+    onCreate: () => new Date(),
+  })
   public readonly _createdAt!: Date
 
-  @Property({ columnType: "timestamptz", onCreate: () => new Date(), onUpdate: () => new Date() })
+  @Property({
+    columnType: "timestamptz",
+    fieldName: "updated_at",
+    onCreate: () => new Date(),
+    onUpdate: () => new Date(),
+  })
   private _updatedAt!: Date
 
   @OneToMany(() => WagerTransaction, transaction => transaction.wallet)

@@ -1,4 +1,5 @@
 import { ReflectMetadataProvider, defineConfig } from '@mikro-orm/core';
+import { Migrator } from '@mikro-orm/migrations';
 import { PostgreSqlDriver } from '@mikro-orm/postgresql';
 
 export default defineConfig({
@@ -11,4 +12,9 @@ export default defineConfig({
   entitiesTs: ['./src/**/*.entity.ts'],
   metadataProvider: ReflectMetadataProvider,
   driver: PostgreSqlDriver,
+  extensions: [Migrator],
+  migrations: {
+    path: './dist/migrations',
+    pathTs: './src/migrations',
+  },
 });

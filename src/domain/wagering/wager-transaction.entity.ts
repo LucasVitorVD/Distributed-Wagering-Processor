@@ -1,10 +1,13 @@
 import {
+  Check,
   Collection,
   Entity,
   ManyToOne,
+  Index,
   OneToMany,
   PrimaryKey,
   Property,
+  Unique,
   type Rel,
 } from "@mikro-orm/core";
 import { Wallet } from "../wallet/wallet.entity.js";
@@ -83,12 +86,24 @@ export type WagerTransactionState = {
   failureCode: FailureCode | null;
 };
 
-@Entity()
+@Entity({ tableName: "wager_transactions" })
+@Check({
+  name: "chk_wager_amount_positive",
+  expression: (columns) => `${columns.amountAmount} > 0`,
+})
+@Unique({
+  name: "uq_wager_transactions_provider_external",
+  properties: ["providerId", "externalTransactionId"],
+})
+@Index({
+  name: "idx_wager_transactions_wallet",
+  properties: ["wallet"],
+})
 export class WagerTransaction {
   @PrimaryKey({ type: "uuid" })
   public readonly id!: string;
 
-  @ManyToOne(() => Wallet)
+  @ManyToOne(() => Wallet, { updateRule: "no action" })
   public readonly wallet!: Rel<Wallet>;
 
   @OneToMany(() => WalletLedgerEntry, (entry) => entry.transaction)
@@ -115,14 +130,14 @@ export class WagerTransaction {
   @Property({
     type: "text",
     nullable: true,
-    fieldName: "referenceExternalTransactionId",
+    fieldName: "reference_external_transaction_id",
   })
   private _referenceExternalTransactionId?: string;
 
   @Property({
-    type: "text",
+    type: "uuid",
     nullable: true,
-    fieldName: "referenceTransactionId",
+    fieldName: "reference_transaction_id",
   })
   private _referenceTransactionId?: string;
 
@@ -146,7 +161,7 @@ export class WagerTransaction {
 
   @Property({
     columnType: "timestamptz",
-    fieldName: "updatedAt",
+    fieldName: "updated_at",
     onCreate: () => new Date(),
     onUpdate: () => new Date(),
   })
@@ -155,14 +170,14 @@ export class WagerTransaction {
   @Property({
     columnType: "timestamptz",
     nullable: true,
-    fieldName: "processedAt",
+    fieldName: "processed_at",
   })
   private _processedAt?: Date;
 
   @Property({
     columnType: "varchar(50)",
     nullable: true,
-    fieldName: "failureCode",
+    fieldName: "failure_code",
   })
   private _failureCode?: FailureCode;
 

@@ -1,9 +1,12 @@
 
 import {
   Entity,
+  Check,
+  Index,
   ManyToOne,
   PrimaryKey,
   Property,
+  Unique,
   type Rel,
 } from "@mikro-orm/core";
 
@@ -53,17 +56,40 @@ export type CreateLedgerEntryProps = {
   createdAt: Date;
 };
 
-@Entity()
+@Entity({ tableName: "wallet_ledger_entries" })
+@Check({
+  name: "chk_ledger_money_positive",
+  expression: (columns) => `${columns.moneyAmount} > 0`,
+})
+@Check({
+  name: "chk_ledger_balance_non_negative",
+  expression: (columns) =>
+    `${columns.balanceBeforeAmount} >= 0 and ${columns.balanceAfterAmount} >= 0`,
+})
+@Check({
+  name: "chk_ledger_currency_consistency",
+  expression: (columns) =>
+    `${columns.moneyCurrency} = ${columns.balanceBeforeCurrency} and ${columns.moneyCurrency} = ${columns.balanceAfterCurrency}`,
+})
+@Unique({
+  name: "uq_wallet_ledger_entries_wallet_transaction",
+  properties: ["wallet", "transaction"],
+})
+@Index({
+  name: "idx_wallet_ledger_entries_transaction",
+  properties: ["transaction"],
+})
 export class WalletLedgerEntry {
   @PrimaryKey({ type: "uuid" })
   public readonly id!: string;
 
-  @ManyToOne(() => Wallet)
+  @ManyToOne(() => Wallet, { updateRule: "no action" })
   public readonly wallet!: Rel<Wallet>;
 
   @ManyToOne(() => WagerTransaction, {
-      inversedBy: "ledgerEntries",
-    joinColumn: "transactionId",
+    inversedBy: "ledgerEntries",
+    joinColumn: "transaction_id",
+    updateRule: "no action",
   })
   public readonly transaction!: Rel<WagerTransaction>;
 
