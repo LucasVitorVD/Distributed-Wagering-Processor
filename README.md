@@ -8,7 +8,7 @@ O MVP síncrono está implementado: criação e consulta de carteiras, consulta 
 
 Este MVP **não é um sistema completo de produção**. Ainda não há autenticação, autorização/escopo por provedor, limite de requisições, processamento assíncrono de mensagens, outbox ou DLQ. Não exponha a API publicamente com dados financeiros reais.
 
-Veja o [scope e o backlog](docs/scope/scope.md) e as [decisões técnicas](docs/specs/).
+Veja o [scope e o backlog](docs/scope/scope.md) e as [decisões técnicas](ARCHITECTURE.md).
 
 ## Requisitos
 
