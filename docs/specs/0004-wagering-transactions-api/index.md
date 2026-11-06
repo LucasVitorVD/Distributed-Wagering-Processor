@@ -1,7 +1,7 @@
 # 0004. Wagering transaction API
 
 **Date**: 2026-11-06
-**Status**: In Progress
+**Status**: Implemented
 
 ## Summary
 
@@ -35,8 +35,6 @@ These routes let a provider submit a wagering transaction and let a game service
 **Chosen option**: Option 1, process synchronously through the current unit of work.
 
 Use the existing domain entities, repository contracts, row lock, uniqueness constraints, and unit of work. Compute the hash from the validated business payload, persist terminal business rejections as `REJECTED`, and use the persisted transaction as the replay result. Add a result balance snapshot to each wagering transaction so the compact POST result remains stable across retries. Do not add a queue or separate idempotency table.
-
-**Implementation skills**: `nestjs-best-practices` (`kadajett/agent-nestjs-skills`, `.agents/skills/nestjs-best-practices/`) · `nestjs-patterns` (`affaan-m/ecc`, `.agents/skills/nestjs-patterns/`) · `class-validator` (`claude-dev-suite/claude-dev-suite`, `.agents/skills/class-validator/`)
 
 ## Feature design
 
@@ -174,5 +172,5 @@ Reasoning and options: see [rationale.md](./rationale.md).
 
 ## Follow-up
 
-* [ ] Add `nestjs-best-practices`, `nestjs-patterns`, and `class-validator` pointers to root `AGENTS.md`; these relevant conventions are installed under `.agents/skills/` but are not listed in the project context.
-* [ ] Design provider authentication, ownership checks, and request limiting before public deployment.
+* Design provider authentication, ownership checks, and request limiting before public deployment.
+* If asynchronous processing becomes part of the challenge scope, design the SQS, outbox, retry, and DLQ flow separately.

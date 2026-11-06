@@ -1,7 +1,7 @@
 # 0003. Wallet query API
 
 **Date**: 2026-11-06
-**Status**: In Progress
+**Status**: Implemented
 
 ## Summary
 
@@ -9,7 +9,7 @@ These routes let a game service read a wallet balance and its ledger history. Th
 
 ## Context
 
-The service can create a wallet, but clients cannot yet read its balance or ledger history. The wallet balance is stored on the wallet, while each ledger entry stores its own amount, direction, before and after balances, and creation time. The existing repositories do not yet provide lookup by wallet identifier or paged ledger reads.
+At the time this spec was written, the service could create a wallet, but clients could not yet read its balance or ledger history. The wallet balance is stored on the wallet, while each ledger entry stores its own amount, direction, before and after balances, and creation time. The existing repositories did not yet provide lookup by wallet identifier or paged ledger reads.
 
 The game service needs to show the current balance and inspect all kinds of ledger entries. Ledger history can grow over time, and new entries can be added while a client reads earlier pages. The endpoints also remain part of a challenge application without authentication or request limits.
 
@@ -83,11 +83,9 @@ Copy wallet and ledger data into a read optimized store or cache, and serve thes
 
 Add read methods for wallet lookup and ledger pagination to the existing persistence contracts and MikroORM adapters. Access them through the existing unit of work context without writes. Keep HTTP validation and response mapping in the wallet feature, and read directly from PostgreSQL without a cache (basis: existing project persistence pattern).
 
-**Implementation skills**: `nestjs-best-practices` (`kadajett/agent-nestjs-skills`, `.agents/skills/nestjs-best-practices/`)
-
 ## Rationale
 
-The service already uses repository contracts and a unit of work for wallet and ledger persistence. Extending that path keeps query logic testable and consistent with the existing write flow (basis: `src/domain/repositories/wagering-repositories.ts`, `src/infrastructure/persistence/mikro-orm/wagering-unit-of-work.ts`, and `.agents/skills/nestjs-best-practices/`). The endpoints add new behavior rather than replacing an existing read path, so a separate strangler migration is not useful.
+The service already uses repository contracts and a unit of work for wallet and ledger persistence. Extending that path keeps query logic testable and consistent with the existing write flow (basis: `src/domain/repositories/wagering-repositories.ts` and `src/infrastructure/persistence/mikro-orm/wagering-unit-of-work.ts`). The endpoints add new behavior rather than replacing an existing read path, so a separate strangler migration is not useful.
 
 There is no measured performance problem or need for a second store. A cursor based query avoids offset shifting when new entries arrive, while avoiding a cache that could show an old balance (basis: keyset pagination and measure before optimizing). The cursor is versioned so a later server can deliberately reject or support a new format without exposing its contents as a client contract. Its timestamp preserves the millisecond precision of the `Date` values used by the existing ledger creation path, so the sort key and cursor comparison use the same value.
 
@@ -214,12 +212,9 @@ The project uses a Tracer Bullet approach. First connect the wallet read through
 **Neutral**:
 
 * No migration, new environment variable, cache, or external service is needed.
-* The NestJS best practices skill guides this feature but is not listed in the root `AGENTS.md`. Its project wide conventions should be added there before implementation begins.
-
 ## Follow-up
 
-* [ ] Add a pointer to `.agents/skills/nestjs-best-practices/` in the root `AGENTS.md` so later implementation work loads the project's NestJS conventions.
-* [ ] Add authentication, wallet ownership checks, and request limiting before public exposure.
+* Add authentication, wallet ownership checks, and request limiting before public exposure.
 
 ## References
 
@@ -232,7 +227,6 @@ The project uses a Tracer Bullet approach. First connect the wallet read through
 * `src/wallets/dto/create-wallet.dto.ts`, the current UUID validation convention.
 * `src/domain/shared/money.ts`, the existing exact two decimal serialization rule.
 * `docs/specs/0002-wallet-creation-api.md`, wallet response and challenge security conventions.
-* `.agents/skills/nestjs-best-practices/`, project guidance for repository access, database queries, validation, and error filters.
 
 **Practices & standards**:
 

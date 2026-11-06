@@ -1,7 +1,7 @@
 # 0002. Wallet creation API
 
 **Date**: 2026-11-06
-**Status**: In Progress
+**Status**: Implemented
 
 ## Summary
 
@@ -11,7 +11,7 @@
 
 > ⚠️ Premise note: The challenge allows this route to omit authentication and request limits, but it creates wallets with monetary balances. Exposing it publicly without either permits arbitrary wallet creation and resource abuse. This spec limits that choice to the challenge and requires authentication and request limits before public exposure.
 
-The project has wallet, transaction, and ledger entities, repository contracts, and a unit of work, but its HTTP surface currently contains only `GET /`. The wallet identifier is supplied internally, and the persistence schema stores the wallet player identifier as text. Provider fields on a wager transaction are currently required even when there is no provider event.
+At the time this spec was written, the project had wallet, transaction, and ledger entities, repository contracts, and a unit of work, but its HTTP surface contained only `GET /`. The wallet identifier was supplied internally, and the persistence schema stored the wallet player identifier as text. Provider fields on a wager transaction were required even when there was no provider event.
 
 The endpoint accepts a player identifier and an initial BRL amount. The challenge requires wallet creation to leave a consistent balance, with an auditable opening record for positive balances. No specific legal compliance or retention requirement was provided for this challenge.
 
@@ -83,8 +83,6 @@ Create the wallet first, then use an event and background worker to record the o
 **Chosen option**: Option 2: Create the wallet and opening records atomically.
 
 Use the existing NestJS and MikroORM stack, and persist the wallet and positive opening records through the existing unit of work. Validate requests with NestJS `ValidationPipe`, `class-validator`, and `class-transformer`. Use a global NestJS exception filter for the shared error shape, and map only the named wallet uniqueness constraint to a conflict.
-
-**Implementation skills**: `nestjs-best-practices` (`kadajett/agent-nestjs-skills`, `.agents/skills/nestjs-best-practices/`) · `nestjs-patterns` (`affaan-m/ecc`, `.agents/skills/nestjs-patterns/`) · `class-validator` (`claude-dev-suite/claude-dev-suite`, `.agents/skills/class-validator/`)
 
 ## Rationale
 
@@ -222,7 +220,4 @@ The project uses a Tracer Bullet approach, connecting a small working path throu
 
 ## Follow-up
 
-* [ ] Add `nestjs-best-practices` conventions to root `AGENTS.md`; they apply across the NestJS application.
-* [ ] Add `nestjs-patterns` conventions to root `AGENTS.md`; they apply across the NestJS application.
-* [ ] Add `class-validator` conventions to root `AGENTS.md`; the global validation policy applies across API routes.
-* [ ] Before public deployment, design and add authentication and request limiting.
+* Before public exposure, add authentication and request limiting.

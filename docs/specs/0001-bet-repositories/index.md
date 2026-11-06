@@ -1,11 +1,11 @@
 # 0001. Repositories for BET processing
 
 **Date**: 2026-11-05
-**Status**: In Progress
+**Status**: Implemented
 
 ## Summary
 
-This decision defines how the application reads and writes wallets, wager transactions, and ledger entries. Domain contracts keep business code separate from MikroORM, while one transaction scope keeps related database changes together. A wallet row lock and existing database constraints prepare the next step to process BET requests without charging twice.
+This decision defines how the application reads and writes wallets, wager transactions, and ledger entries. Domain contracts keep business code separate from MikroORM, while one transaction scope keeps related database changes together. A wallet row lock and database constraints are used by the implemented synchronous wagering API to prevent concurrent balance updates and duplicate effects.
 
 ## Requirements
 
@@ -65,9 +65,9 @@ Repositories do not flush individually. The unit of work uses the transaction sc
 
 | Action | Value produced or used | Source |
 |---|---|---|
-| Find and lock wallet | `playerId` and `currency` | Arguments supplied by the future BET application use case from its validated wager command |
-| Find transaction by idempotency | `idempotencyKey` | Argument supplied by the future BET application use case |
-| Find transaction by provider identity | `providerId` and `externalTransactionId` | Arguments supplied by the future BET application use case |
+| Find and lock wallet | `playerId` and `currency` | Arguments supplied by the wagering application service from its validated request |
+| Find transaction by idempotency | `idempotencyKey` | Required `Idempotency-Key` header supplied to the wagering application service |
+| Find transaction by provider identity | `providerId` and `externalTransactionId` | Validated wagering request fields |
 | Find ledger entries | `transactionId` | `WagerTransaction.id` |
 | Save wallet or transaction | Entity fields and state | Existing domain entity |
 | Add ledger entry | Amount, direction, before and after balances, and relationships | Existing `WalletLedgerEntry` created by the domain logic |
@@ -77,16 +77,16 @@ Repositories do not flush individually. The unit of work uses the transaction sc
 **Key invariants**:
 
 * Repositories used in a BET operation belong to one unit of work and one PostgreSQL transaction.
-* The wallet row is locked before the future use case reads and changes its balance.
+* The wallet row is locked before the wagering application service reads and changes its balance.
 * A balance change, its wager transaction, and its ledger entry are committed together or all rolled back.
-* An existing idempotency key with the same payload is a safe replay. A different payload for that key is a conflict. Reuse of a provider transaction ID with a different key is also a conflict. The future application use case handles these outcomes after a uniqueness race by rolling back, rereading the existing transaction, and comparing its payload hash.
+* An existing idempotency key with the same payload is a safe replay. A different payload for that key is a conflict. Reuse of a provider transaction ID with a different key is also a conflict. The wagering application service handles these outcomes after a uniqueness race by rolling back, rereading the existing transaction, and comparing its payload hash.
 * Repositories do not retry persistence failures or hide database errors.
 * Ledger entries are inserted only. The existing database trigger rejects updates and deletes.
 * Searches use existing unique keys or indexes. No list endpoint or pagination behavior is introduced.
 
 **Security model**:
 
-Repositories are internal application components and are not an authorization boundary. They do not expose endpoints or log player identifiers, balances, or wager payloads. The future application use case and its inbound provider interface must authenticate the provider and validate player context before calling these repositories. No specific regulatory standard or additional retention rule was provided. The immutable ledger remains the audit record for money changes.
+Repositories are internal application components and are not an authorization boundary. They do not expose endpoints or log player identifiers, balances, or wager payloads. The current HTTP API does not authenticate providers or verify their identity; add authentication and validate player context before public exposure. No specific regulatory standard or additional retention rule was provided. The immutable ledger remains the audit record for money changes.
 
 **Configuration required**:
 
@@ -117,7 +117,7 @@ None for the application. Integration tests use a separate PostgreSQL Compose pr
 * The unit of work and adapters add interfaces and dependency injection setup.
 * Same wallet operations wait on a database lock, so a busy wallet has serialized processing.
 * PostgreSQL integration tests require Docker and take longer than isolated unit tests.
-* This slice does not yet process a BET request or return the result of an idempotent replay.
+* This repository slice defines persistence only. The HTTP wagering flow and idempotent replay are defined in [spec 0004](../0004-wagering-transactions-api/index.md).
 
 **Neutral**:
 
@@ -126,4 +126,5 @@ None for the application. Integration tests use a separate PostgreSQL Compose pr
 
 ## Follow-up
 
-* [ ] Design and implement the BET application use case and its external provider authentication. It must handle uniqueness races after rollback, compare payload hashes, and persist the wallet, wager transaction, and ledger entry through one unit of work.
+* Provider authentication and verified player context must be added before public exposure; repository contracts are not an authorization boundary.
+* Asynchronous message processing, outbox, retries, and DLQ are not part of this repository slice.

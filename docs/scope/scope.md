@@ -1,80 +1,58 @@
 # Scope: Distributed Wagering Processor
 
-Este serviço processa transações de apostas e mantém carteiras e seus lançamentos. Este scope acompanha o trabalho de persistência necessário para processar apostas com segurança.
+Este documento separa o MVP que está implementado do que continua pendente. O projeto é um desafio técnico e não deve ser tratado como pronto para produção.
 
-**Build approach:** Tracer Bullet (conectar cada camada em uma fatia pequena e funcional).
-**Workflow:** Beta (verificação e testes depois do build).
+## Status do MVP
 
-_Estas são recomendações para organizar o build, não requisitos. Você decide quando uma feature está concluída._
+O MVP síncrono está implementado sobre PostgreSQL. Na última validação, `bun run test:integration` executou a build e passou **35 testes de integração em 4 arquivos**, usando um PostgreSQL descartável real.
 
-## At a glance
+| Capacidade | Status | Evidência principal |
+|---|---|---|
+| Repositórios e unidade de trabalho transacional | Implementado | Locks, rollback, constraints e ledger imutável; `test/wagering-repositories.integration-spec.ts` |
+| Criação de carteira BRL | Implementado | `POST /wallets`, com lançamento `OPENING` atômico para saldo inicial positivo |
+| Consulta de carteira e ledger | Implementado | `GET /wallets/:walletId` e paginação por cursor em `GET /wallets/:walletId/ledger` |
+| Transações de wagering | Implementado | GET por ID e provedor; POST síncrono para BET, WIN, LOSS, REFUND e ROLLBACK |
+| Idempotência e concorrência | Implementado | Chave e hash persistidos no PostgreSQL; locks e constraints aplicam-se entre instâncias |
+| Reconciliação | Implementado | Compara saldo armazenado ao ledger, sinaliza divergência e não corrige dados |
+| Health checks | Implementado com limite | Liveness verifica o processo; readiness exige PostgreSQL e SQS acessíveis |
+| Logs e métricas síncronas | Implementado parcialmente | JSON estruturado, correlação HTTP e métricas dos fluxos síncronos |
 
-| # | Feature | Phase | Status |
-|---|---------|-------|--------|
-| 1 | BET repositories | Bet processing | in-progress |
-| 2 | Wallet creation | Wallets | in-progress |
-| 3 | Wallet reads | Wallets | in-progress |
-| 4 | Wagering transaction API | Bet processing | in-progress |
-| 5 | Provider authentication and request limits | Security | planned |
+## O que está fora do MVP
 
-## Bet processing
+### Segurança antes de exposição pública
 
-### 1. BET repositories · in-progress
-Criar contratos de domínio e adapters MikroORM para ler e persistir carteiras, transações e lançamentos de ledger na mesma transação.
-**Done when:** consultas retornam os registros existentes; o lock serializa operações na mesma carteira; gravações relacionadas confirmam juntas ou são revertidas; testes de integração verificam constraints e imutabilidade do ledger.
-- [x] Design it (spec): `/architect repositories para BET`
-- [x] Build it: `/develop BET repositories`
-  - [x] Contratos de domínio e unidade de trabalho (AC-1, AC-2, AC-3, AC-4)
-  - [x] Adapters MikroORM, lock e gravação transacional (AC-2, AC-3, AC-4, AC-5, AC-6)
-  - [x] PostgreSQL descartável e testes de integração (AC-5, AC-6, AC-7, AC-8)
-- [ ] Verify it: `/check verify BET repositories`
-- [ ] Test it: `/test BET repositories`
-Spec [0001](../specs/0001-bet-repositories/index.md)
-Code in: `src/domain/repositories`, `src/infrastructure/persistence`, `test/wagering-repositories.integration-spec.ts`
+Nenhuma rota da aplicação deve ser exposta publicamente com dados financeiros reais enquanto não houver:
 
-### 4. Wagering transaction API · in-progress
-Expor consultas por ID interno e por referência do provedor, além do POST síncrono para todos os tipos externos.
-**Done when:** GETs retornam a mesma representação; POST aceita todos os tipos externos e aplica as regras de saldo e referência; a resposta contém `transactionId`, `status`, `balance` e `idempotentReplay`; o saldo do resultado é persistido para replay estável; chave e hash garantem replay seguro; gravações são atômicas e os conflitos, falhas e limites de segurança estão documentados e testados.
-- [x] Design it (spec): `/architect API de transações de wagering` [0004](../specs/0004-wagering-transactions-api/index.md)
-- [x] Build it: `/develop wagering transaction API`
-  - [x] Consultas GET e representação sem dados internos (AC-1, AC-2, AC-11)
-  - [x] Fluxo BET síncrono com validação, hash e replay (AC-3, AC-4, AC-8, AC-9)
-  - [x] Tipos externos, referências, rejeições e limites acumulados (AC-5, AC-6, AC-7)
-  - [x] Corridas de unicidade, erros, testes e documentação (AC-10, AC-12, AC-13)
-  - [x] Saldo de resultado persistido e formato compacto do POST com replay estável (AC-4, AC-7, AC-9, AC-11)
-- [ ] Verify it: `/check verify wagering transaction API`
-- [ ] Test it: `/test wagering transaction API`
-Code in: `src/wagering`, `src/domain/wagering`, `src/domain/repositories`, `src/infrastructure/persistence`, `src/common/filters`, `test/wagering-transactions-api.integration-spec.ts`, `README.md`
+- autenticação de provedores e autorização baseada na identidade autenticada;
+- verificação de escopo/propriedade para consultas e operações sobre carteiras;
+- rate limiting e proteção apropriada dos endpoints operacionais, inclusive `/metrics` e health checks.
 
-## Security
+Os `providerId` recebidos hoje são valores declarados na requisição, não identidades autenticadas.
 
-### 5. Provider authentication and request limits · needs a decision
-Adicionar autenticação de provedor, escopo de acesso e limite de chamadas antes de expor as rotas publicamente. Derivado da spec 0004.
-**Done when:** a identidade do provedor é verificada; consultas e alterações ficam limitadas aos dados do provedor; limites de chamadas e testes de acesso estão definidos.
-- [ ] Design it (spec): `/architect autenticação de provedor e limites de requisição`
+### Processamento assíncrono
 
-## Wallets
+Não há produtor/consumidor SQS, publicação de eventos, outbox transacional, retry de mensagens ou DLQ. A prontidão verifica acesso à fila SQS, mas isso **não** significa que o processamento de mensagens esteja implementado.
 
-### 2. Wallet creation · in-progress
-Criar uma wallet BRL por `playerId` via `POST /wallets`, com validação, resposta uniforme de erros e abertura atômica no ledger para saldo inicial positivo. Saldo zero cria somente a wallet. Autenticação e limite de chamadas ficam fora do desafio e devem ser documentados como necessários antes de exposição pública.
-**Done when:** a rota cria wallets com saldo zero e positivo; para saldo positivo, wallet, `OPENING` e lançamento de ledger persistem juntos; duplicidade retorna conflito; entradas inválidas e falhas inesperadas usam o contrato de erro; testes de integração verificam atomicidade e concorrência; o README explica o limite de segurança.
-- [x] Design it (spec): `/architect POST /wallets` [0002](../specs/0002-wallet-creation-api.md)
-- [x] Build it: `/develop wallet creation`
-  - [x] Suporte de domínio e migração para `OPENING` e ledger (AC-3, AC-4, AC-5)
-  - [x] Fluxo `POST /wallets` para saldo zero e positivo (AC-2, AC-3, AC-4, AC-5)
-  - [x] Validação, erros, testes e documentação do limite de segurança (AC-1, AC-6, AC-7, AC-8)
-Code in: `src/wallets`, `src/common`, `src/domain`, `src/migrations`, `test/wallet-creation*`, `README.md`
-- [ ] Verify it: `/check verify wallet creation`
-- [ ] Test it: `/test wallet creation`
+Se o desafio exigir essa parte, o próximo slice deve decidir e documentar o fluxo, cobrindo publicação confiável após commit (por exemplo, via outbox), consumo idempotente, política de retry/backoff, DLQ e testes de integração com PostgreSQL e SQS real ou local compatível. Métricas de outbox lag e contagem de DLQ só fazem sentido depois que esses componentes existirem.
 
-### 3. Wallet reads · in-progress
-Disponibilizar `GET /wallets/:walletId` para consultar o saldo e `GET /wallets/:walletId/ledger` para consultar lançamentos com cursor estável.
-**Done when:** as duas rotas retornam os campos definidos; validação, paginação, carteira inexistente e histórico vazio seguem o contrato; os logs não incluem dados financeiros; testes unitários, HTTP e PostgreSQL cobrem os casos; o README explica o limite de segurança do desafio.
-- [x] Design it (spec): `/architect GET /wallets` [0003](../specs/0003-wallet-query-api.md)
-- [x] Build it: `/develop wallet reads`
-  - [x] Consulta da wallet, resposta e validação (AC-1, AC-2, AC-7)
-  - [x] Cursor do ledger, paginação e testes PostgreSQL (AC-3, AC-4, AC-5, AC-6, AC-7)
-  - [x] Logs seguros e documentação do limite de segurança (AC-8, AC-9)
-- [ ] Verify it: `/check verify wallet reads`
-- [ ] Test it: `/test wallet reads`
-Code in: `src/wallets`, `src/common`, `src/domain/repositories`, `src/infrastructure/persistence`, `test/wallet-query-api.integration-spec.ts`, `test/wallet-creation.e2e-spec.ts`, `README.md`
+### Operação de produção
+
+Ainda devem ser definidos conforme o ambiente-alvo: gestão de migrations e deploy, backups e recuperação, retenção dos registros de auditoria, alertas, tracing distribuído e dashboards.
+
+## Validação
+
+```bash
+bun run test
+bun run test:integration:db:up
+bun run test:integration
+bun run test:integration:db:down
+```
+
+`bun run test:integration` executa a build antes da suíte de integração. A última execução passou com 35 testes PostgreSQL. Testes unitários podem usar mocks para isolar regras; eles complementam, mas não substituem, a suíte de integração com PostgreSQL.
+
+## Specs do MVP
+
+- [0001 — Repositórios para processamento BET](../specs/0001-bet-repositories/index.md)
+- [0002 — Criação de carteiras](../specs/0002-wallet-creation-api.md)
+- [0003 — Consultas de carteiras](../specs/0003-wallet-query-api.md)
+- [0004 — API de transações de wagering](../specs/0004-wagering-transactions-api/index.md)

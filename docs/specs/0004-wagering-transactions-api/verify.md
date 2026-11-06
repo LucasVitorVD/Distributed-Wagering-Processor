@@ -1,6 +1,6 @@
 # Verify: Wagering transaction API · spec 0004 · updated 2026-11-06
 
-_Steps derived from spec 0004 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
+_Steps derived from spec 0004 acceptance criteria. The latest automated integration run passed on 2026-11-06; these steps remain a review checklist and are not all automated._
 
 ## UI / manual
 

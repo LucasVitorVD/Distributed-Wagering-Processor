@@ -1,6 +1,6 @@
 # Verify: BET repositories · spec 0001 · updated 2026-11-05
 
-_Steps derived from spec 0001 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
+_Steps derived from spec 0001 acceptance criteria. The latest automated integration run passed on 2026-11-06; these steps remain a review checklist and are not all automated._
 
 ## UI / manual
 
@@ -8,15 +8,15 @@ No screen is part of this feature.
 
 ## Commands
 
-- [ ] `npm run build && npx tsc --noEmit --incremental false` → build and type checks pass, and the domain contracts do not import MikroORM types → AC-1
-- [ ] `npm run test:integration:db:up && npm run test:integration` → wallet lookup matches the supplied player and currency, returns null for missing or different values, and the locked lookup finds the matching row → AC-2
-- [ ] `npm run test:integration` → the supplied idempotency key finds its transaction, and both provider ID and external transaction ID must match → AC-3
-- [ ] `npm run test:integration` → saving new and loaded transactions works, changed domain state persists, and ledger lookup uses `WagerTransaction.id` → AC-3, AC-4
-- [ ] `npm run test:integration` → a domain created ledger entry reloads with its amount, direction, before balance, and after balance, and its repository exposes no update or delete operation → AC-4
-- [ ] `npm run test:integration` → callback failure and flush failure roll back all related writes and propagate their errors → AC-5, AC-7
-- [ ] `npm run test:integration` → a second operation waits for the same wallet lock while a different wallet can proceed → AC-6
-- [ ] `npm run test:integration` → PostgreSQL rejects duplicate idempotency keys, provider transaction IDs, and ledger entries, and the ledger trigger rejects update and delete attempts → AC-7, AC-8
-- [ ] `npm run test:integration:db:down` → the disposable database service and network are removed → AC-8
+- [ ] `bun run build` → build passes, and the domain contracts do not import MikroORM types → AC-1
+- [ ] `bun run test:integration` → wallet lookup matches the supplied player and currency, returns null for missing or different values, and the locked lookup finds the matching row → AC-2
+- [ ] `bun run test:integration` → the supplied idempotency key finds its transaction, and both provider ID and external transaction ID must match → AC-3
+- [ ] `bun run test:integration` → saving new and loaded transactions works, changed domain state persists, and ledger lookup uses `WagerTransaction.id` → AC-3, AC-4
+- [ ] `bun run test:integration` → a domain created ledger entry reloads with its amount, direction, before balance, and after balance, and its repository exposes no update or delete operation → AC-4
+- [ ] `bun run test:integration` → callback failure and flush failure roll back all related writes and propagate their errors → AC-5, AC-7
+- [ ] `bun run test:integration` → a second operation waits for the same wallet lock while a different wallet can proceed → AC-6
+- [ ] `bun run test:integration` → PostgreSQL rejects duplicate idempotency keys, provider transaction IDs, and ledger entries, and the ledger trigger rejects update and delete attempts → AC-7, AC-8
+- [ ] `bun run test:integration:db:down` → the disposable database service and network are removed → AC-8
 
 ## Acceptance-criteria coverage
 
