@@ -64,7 +64,7 @@ describe('wallet creation API with PostgreSQL', () => {
     expect(response.body).toMatchObject({
       id: expect.any(String),
       playerId,
-      balance: '32.75',
+      balance: { amount: '32.75', currency: 'BRL' },
       version: 1,
     });
 
@@ -100,11 +100,14 @@ describe('wallet creation API with PostgreSQL', () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.balance).toBe('0.00');
+    expect(response.body.balance).toEqual({
+      amount: '0.00',
+      currency: 'BRL',
+    });
     const em = orm.em.fork();
-    expect(
-      await em.count(WagerTransaction, { wallet: response.body.id }),
-    ).toBe(0);
+    expect(await em.count(WagerTransaction, { wallet: response.body.id })).toBe(
+      0,
+    );
     expect(
       await em.count(WalletLedgerEntry, { wallet: response.body.id }),
     ).toBe(0);

@@ -18,6 +18,7 @@ describe('WalletCreationService', () => {
     const entries: WalletLedgerEntry[] = [];
     const repositories: WageringRepositories = {
       wallets: {
+        findById: async () => null,
         findByPlayerAndCurrency: async () => null,
         findByPlayerAndCurrencyForUpdate: async () => null,
         save: (wallet) => wallets.push(wallet),
@@ -28,6 +29,7 @@ describe('WalletCreationService', () => {
         save: (transaction) => transactions.push(transaction),
       },
       ledgerEntries: {
+        findByWalletAfter: async () => [],
         findByTransactionId: async () => [],
         add: (entry) => entries.push(entry),
       },
@@ -55,7 +57,7 @@ describe('WalletCreationService', () => {
 
     expect(response).toMatchObject({
       playerId,
-      balance: '0.00',
+      balance: { amount: '0.00', currency: 'BRL' },
       version: 1,
     });
     expect(wallets).toHaveLength(1);
@@ -75,7 +77,7 @@ describe('WalletCreationService', () => {
     const transaction = transactions[0];
     const ledgerEntry = entries[0];
 
-    expect(response.balance).toBe('25.50');
+    expect(response.balance).toEqual({ amount: '25.50', currency: 'BRL' });
     expect(wallet?.balance.toJSON().amount).toBe('25.50');
     expect(transaction).toMatchObject({
       kind: WagerTransactionKind.Opening,

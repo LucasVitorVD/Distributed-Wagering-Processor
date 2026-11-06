@@ -298,7 +298,7 @@ describe('wagering repositories with PostgreSQL', () => {
     expect(response).toMatchObject({
       id: expect.any(String),
       playerId,
-      balance: '0.00',
+      balance: { amount: '0.00', currency: 'BRL' },
       version: 1,
     });
 

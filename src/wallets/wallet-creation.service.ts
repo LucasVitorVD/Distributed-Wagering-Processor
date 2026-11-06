@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { WalletLedgerEntry } from '../domain/ledger/wallet-ledger-entry.entity.js';
 import { WAGERING_UNIT_OF_WORK } from '../infrastructure/persistence/wagering-persistence.module.js';
 import type { WageringUnitOfWork } from '../domain/repositories/wagering-repositories.js';
-import { Money } from '../domain/shared/money.js';
+import { Currency, Money } from '../domain/shared/money.js';
 import { Wallet } from '../domain/wallet/wallet.entity.js';
 import {
   WagerTransaction,
@@ -14,7 +14,10 @@ import type { CreateWalletDto } from './dto/create-wallet.dto.js';
 export interface CreatedWalletResponse {
   id: string;
   playerId: string;
-  balance: string;
+  balance: {
+    amount: string,
+    currency: Currency
+  };
   version: number;
 }
 
@@ -23,7 +26,7 @@ export class WalletCreationService {
   constructor(
     @Inject(WAGERING_UNIT_OF_WORK)
     private readonly unitOfWork: WageringUnitOfWork,
-  ) {}
+  ) { }
 
   async create(request: CreateWalletDto): Promise<CreatedWalletResponse> {
     const initialBalance = Money.from({
@@ -83,7 +86,10 @@ export class WalletCreationService {
     return {
       id: wallet.id,
       playerId: wallet.playerId,
-      balance: wallet.balance.toJSON().amount,
+      balance: {
+        amount: wallet.balance.toJSON().amount,
+        currency: wallet.balanceCurrency
+      },
       version: wallet.version ?? 1,
     };
   }

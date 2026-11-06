@@ -79,7 +79,10 @@ Example success response:
 {
   "id": "c04e4200-3f21-4c87-94f1-0e50032cc554",
   "playerId": "2f986158-4ec9-4c7f-8ca1-f790a83af8df",
-  "balance": "25.50",
+  "balance": {
+    "amount": "25.50",
+    "currency": "BRL"
+  },
   "version": 1
 }
 ```
@@ -95,6 +98,26 @@ Errors use this format:
 ```
 
 This challenge endpoint has no authentication or request limits. It is not safe for public exposure. Add authentication and request limiting before deploying it publicly.
+
+## Read a wallet
+
+`GET /wallets/:walletId` returns the wallet identifier, player identifier, current balance, and version:
+
+```json
+{
+  "id": "c04e4200-3f21-4c87-94f1-0e50032cc554",
+  "playerId": "2f986158-4ec9-4c7f-8ca1-f790a83af8df",
+  "balance": {
+    "amount": "25.50",
+    "currency": "BRL"
+  },
+  "version": 1
+}
+```
+
+`GET /wallets/:walletId/ledger?limit=50` returns ledger entries from newest to oldest. The limit defaults to `50` and can be set from `1` to `100`. When another page exists, `nextCursor` contains an opaque position. Send it as the `cursor` query parameter to continue. Treat it as an opaque value.
+
+The wallet read routes also have no authentication, wallet ownership check, or request limits. The README warning does not restrict access, so keep the service available only to challenge evaluation. Add authentication, ownership checks, and request limiting before public exposure.
 
 ## PostgreSQL integration tests
 

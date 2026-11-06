@@ -172,7 +172,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "unique": true,
           "length": null,
           "precision": null,
@@ -188,7 +188,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "unique": false,
           "length": null,
           "precision": null,
@@ -204,7 +204,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "unique": false,
           "length": null,
           "precision": null,
@@ -220,7 +220,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "unique": false,
           "length": null,
           "precision": null,
@@ -236,7 +236,7 @@
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
-          "nullable": false,
+          "nullable": true,
           "unique": false,
           "length": null,
           "precision": null,
@@ -362,6 +362,12 @@
           "columnName": "amount_amount",
           "definition": "CHECK ((amount_amount > (0)::numeric))",
           "expression": "amount_amount > 0"
+        },
+        {
+          "name": "chk_wager_provider_fields_by_kind",
+          "columnName": "round_id",
+          "definition": "CHECK (((((kind)::text = 'OPENING'::text) AND (provider_id IS NULL) AND (external_transaction_id IS NULL) AND (player_id IS NULL) AND (round_id IS NULL) AND (game_id IS NULL)) OR (((kind)::text <> 'OPENING'::text) AND (provider_id IS NOT NULL) AND (external_transaction_id IS NOT NULL) AND (player_id IS NOT NULL) AND (round_id IS NOT NULL) AND (game_id IS NOT NULL))))",
+          "expression": "((kind = 'OPENING'::text) AND provider_id IS NULL) AND (external_transaction_id IS NULL) AND (player_id IS NULL) AND (round_id IS NULL) AND (game_id IS NULL)) OR (((kind <> 'OPENING'::text) AND (provider_id IS NOT NULL) AND (external_transaction_id IS NOT NULL) AND (player_id IS NOT NULL) AND (round_id IS NOT NULL) AND (game_id IS NOT NULL))"
         }
       ],
       "foreignKeys": {
@@ -634,7 +640,7 @@
         },
         {
           "name": "chk_ledger_currency_consistency",
-          "columnName": "balance_before_currency",
+          "columnName": "money_currency",
           "definition": "CHECK ((((money_currency)::text = (balance_before_currency)::text) AND ((money_currency)::text = (balance_after_currency)::text)))",
           "expression": "(money_currency = balance_before_currency) AND (money_currency = balance_after_currency)"
         },
@@ -696,19 +702,19 @@
         },
         "player_id": {
           "name": "player_id",
-          "type": "varchar(255)",
+          "type": "uuid",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": false,
           "unique": true,
-          "length": 255,
+          "length": null,
           "precision": null,
           "scale": null,
           "default": null,
           "comment": null,
           "enumItems": [],
-          "mappedType": "string"
+          "mappedType": "uuid"
         },
         "balance_amount": {
           "name": "balance_amount",

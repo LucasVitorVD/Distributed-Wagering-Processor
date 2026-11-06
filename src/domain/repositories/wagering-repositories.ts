@@ -4,6 +4,8 @@ import type { Wallet } from '../wallet/wallet.entity.js';
 import type { WagerTransaction } from '../wagering/wager-transaction.entity.js';
 
 export interface WalletRepository {
+  findById(id: string): Promise<Wallet | null>;
+
   findByPlayerAndCurrency(
     playerId: string,
     currency: Currency,
@@ -31,11 +33,22 @@ export interface WagerTransactionRepository {
 }
 
 export interface WalletLedgerEntryRepository {
+  findByWalletAfter(
+    walletId: string,
+    cursor: LedgerEntryCursor | null,
+    limit: number,
+  ): Promise<readonly WalletLedgerEntry[]>;
+
   findByTransactionId(
     transactionId: string,
   ): Promise<readonly WalletLedgerEntry[]>;
 
   add(entry: WalletLedgerEntry): void;
+}
+
+export interface LedgerEntryCursor {
+  createdAt: Date;
+  id: string;
 }
 
 export interface WageringRepositories {

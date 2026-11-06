@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { EntityManager, LockMode } from '@mikro-orm/core';
 import { WalletLedgerEntry } from '../../../domain/ledger/wallet-ledger-entry.entity.js';
 import type {
+  LedgerEntryCursor,
   WalletLedgerEntryRepository,
   WagerTransactionRepository,
   WageringRepositories,
@@ -14,6 +15,10 @@ import type { Currency } from '../../../domain/shared/money.js';
 
 class MikroOrmWalletRepository implements WalletRepository {
   constructor(private readonly em: EntityManager) {}
+
+  findById(id: string): Promise<Wallet | null> {
+    return this.em.findOne(Wallet, { id });
+  }
 
   findByPlayerAndCurrency(
     playerId: string,
@@ -64,6 +69,29 @@ class MikroOrmWagerTransactionRepository implements WagerTransactionRepository {
 
 class MikroOrmWalletLedgerEntryRepository implements WalletLedgerEntryRepository {
   constructor(private readonly em: EntityManager) {}
+
+  findByWalletAfter(
+    walletId: string,
+    cursor: LedgerEntryCursor | null,
+    limit: number,
+  ): Promise<readonly WalletLedgerEntry[]> {
+    return this.em.find(
+      WalletLedgerEntry,
+      cursor
+        ? {
+            wallet: walletId,
+            $or: [
+              { createdAt: { $lt: cursor.createdAt } },
+              { createdAt: cursor.createdAt, id: { $lt: cursor.id } },
+            ],
+          }
+        : { wallet: walletId },
+      {
+        orderBy: { createdAt: 'DESC', id: 'DESC' },
+        limit,
+      },
+    );
+  }
 
   findByTransactionId(
     transactionId: string,

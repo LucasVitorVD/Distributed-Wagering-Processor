@@ -8,6 +8,12 @@ export class DomainError extends Error {
   }
 }
 
+export class WalletNotFoundError extends DomainError {
+  constructor() {
+    super('WALLET_NOT_FOUND', 'Carteira não encontrada.');
+  }
+}
+
 export class NegativeBalanceError extends DomainError {
   constructor(walletId: string) {
     super(

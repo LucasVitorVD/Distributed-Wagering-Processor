@@ -12,7 +12,10 @@ import {
   DifferentCurrencyError,
   InvalidMoneyError,
 } from '../../domain/shared/money.js';
-import { DomainError } from '../../domain/shared/errors.js';
+import {
+  DomainError,
+  WalletNotFoundError,
+} from '../../domain/shared/errors.js';
 
 interface ApiErrorResponse {
   statusCode: number;
@@ -33,11 +36,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const errorResponse = this.toResponse(exception);
 
     if (errorResponse.statusCode === HttpStatus.INTERNAL_SERVER_ERROR) {
-      const error =
-        exception instanceof Error
-          ? `${exception.message}\n${exception.stack ?? ''}`
-          : String(exception);
-      this.logger.error(error);
+      this.logger.error('Unexpected error while handling request.');
     }
 
     response.status(errorResponse.statusCode).json(errorResponse);
@@ -52,6 +51,14 @@ export class ApiExceptionFilter implements ExceptionFilter {
         statusCode: HttpStatus.CONFLICT,
         code: 'WALLET_ALREADY_EXISTS',
         message: 'Já existe uma carteira para este jogador.',
+      };
+    }
+
+    if (exception instanceof WalletNotFoundError) {
+      return {
+        statusCode: HttpStatus.NOT_FOUND,
+        code: exception.code,
+        message: exception.message,
       };
     }
 

@@ -14,17 +14,25 @@ import { configureApplication } from '../src/common/configure-application.js';
 import { InvalidAmountError } from '../src/domain/shared/errors.js';
 import { WalletsController } from '../src/wallets/wallets.controller.js';
 import { WalletCreationService } from '../src/wallets/wallet-creation.service.js';
+import { WalletQueryService } from '../src/wallets/wallet-query.service.js';
 
 describe('POST /wallets', () => {
   let app: Awaited<ReturnType<TestingModule['createNestApplication']>>;
   const service = {
     create: vi.fn(),
   };
+  const queryService = {
+    findWallet: vi.fn(),
+    findLedger: vi.fn(),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [WalletsController],
-      providers: [{ provide: WalletCreationService, useValue: service }],
+      providers: [
+        { provide: WalletCreationService, useValue: service },
+        { provide: WalletQueryService, useValue: queryService },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication();
@@ -37,8 +45,19 @@ describe('POST /wallets', () => {
     service.create.mockResolvedValue({
       id: 'c04e4200-3f21-4c87-94f1-0e50032cc554',
       playerId: '2f986158-4ec9-4c7f-8ca1-f790a83af8df',
-      balance: '25.50',
+      balance: { amount: '25.50', currency: 'BRL' },
       version: 1,
+    });
+    queryService.findWallet.mockResolvedValue({
+      id: 'c04e4200-3f21-4c87-94f1-0e50032cc554',
+      playerId: '2f986158-4ec9-4c7f-8ca1-f790a83af8df',
+      balance: { amount: '25.50', currency: 'BRL' },
+      version: 1,
+    });
+    queryService.findLedger.mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      limit: 50,
     });
   });
 
@@ -58,7 +77,7 @@ describe('POST /wallets', () => {
     expect(response.body).toEqual({
       id: 'c04e4200-3f21-4c87-94f1-0e50032cc554',
       playerId: '2f986158-4ec9-4c7f-8ca1-f790a83af8df',
-      balance: '25.50',
+      balance: { amount: '25.50', currency: 'BRL' },
       version: 1,
     });
     expect(service.create).toHaveBeenCalledWith({
@@ -161,5 +180,59 @@ describe('POST /wallets', () => {
       code: 'INTERNAL_SERVER_ERROR',
       message: 'Erro interno do servidor.',
     });
+  });
+
+  it('retorna os dados da carteira com GET /wallets/:walletId', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/wallets/c04e4200-3f21-4c87-94f1-0e50032cc554',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: 'c04e4200-3f21-4c87-94f1-0e50032cc554',
+      playerId: '2f986158-4ec9-4c7f-8ca1-f790a83af8df',
+      balance: { amount: '25.50', currency: 'BRL' },
+      version: 1,
+    });
+  });
+
+  it('retorna paginação padrão do ledger', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/wallets/c04e4200-3f21-4c87-94f1-0e50032cc554/ledger',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      items: [],
+      nextCursor: null,
+      limit: 50,
+    });
+    expect(queryService.findLedger).toHaveBeenCalledWith(
+      'c04e4200-3f21-4c87-94f1-0e50032cc554',
+      {},
+    );
+  });
+
+  it.each(['0', '01', '-1', '1.0', '1e1', '101', ' 2'])(
+    'rejeita limite inválido %s',
+    async (limit) => {
+      const response = await request(app.getHttpServer())
+        .get('/wallets/c04e4200-3f21-4c87-94f1-0e50032cc554/ledger')
+        .query({ limit });
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('VALIDATION_ERROR');
+      expect(queryService.findLedger).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejeita UUID inválido antes de consultar', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/wallets/not-a-uuid',
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('VALIDATION_ERROR');
+    expect(queryService.findWallet).not.toHaveBeenCalled();
   });
 });

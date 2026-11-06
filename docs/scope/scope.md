@@ -13,6 +13,7 @@ _Estas são recomendações para organizar o build, não requisitos. Você decid
 |---|---------|-------|--------|
 | 1 | BET repositories | Bet processing | in-progress |
 | 2 | Wallet creation | Wallets | in-progress |
+| 3 | Wallet reads | Wallets | in-progress |
 
 ## Bet processing
 
@@ -42,3 +43,15 @@ Criar uma wallet BRL por `playerId` via `POST /wallets`, com validação, respos
 Code in: `src/wallets`, `src/common`, `src/domain`, `src/migrations`, `test/wallet-creation*`, `README.md`
 - [ ] Verify it: `/check verify wallet creation`
 - [ ] Test it: `/test wallet creation`
+
+### 3. Wallet reads · in-progress
+Disponibilizar `GET /wallets/:walletId` para consultar o saldo e `GET /wallets/:walletId/ledger` para consultar lançamentos com cursor estável.
+**Done when:** as duas rotas retornam os campos definidos; validação, paginação, carteira inexistente e histórico vazio seguem o contrato; os logs não incluem dados financeiros; testes unitários, HTTP e PostgreSQL cobrem os casos; o README explica o limite de segurança do desafio.
+- [x] Design it (spec): `/architect GET /wallets` [0003](../specs/0003-wallet-query-api.md)
+- [x] Build it: `/develop wallet reads`
+  - [x] Consulta da wallet, resposta e validação (AC-1, AC-2, AC-7)
+  - [x] Cursor do ledger, paginação e testes PostgreSQL (AC-3, AC-4, AC-5, AC-6, AC-7)
+  - [x] Logs seguros e documentação do limite de segurança (AC-8, AC-9)
+- [ ] Verify it: `/check verify wallet reads`
+- [ ] Test it: `/test wallet reads`
+Code in: `src/wallets`, `src/common`, `src/domain/repositories`, `src/infrastructure/persistence`, `test/wallet-query-api.integration-spec.ts`, `test/wallet-creation.e2e-spec.ts`, `README.md`
