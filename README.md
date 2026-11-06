@@ -57,6 +57,57 @@ $ bun run test:e2e
 $ bun run test:cov
 ```
 
+## Create a wallet
+
+`POST /wallets` creates one BRL wallet for a player UUID. Send the initial amount as a decimal string:
+
+```json
+{
+  "playerId": "2f986158-4ec9-4c7f-8ca1-f790a83af8df",
+  "initialBalance": {
+    "amount": "25.50",
+    "currency": "BRL"
+  }
+}
+```
+
+The route returns `201 Created` with the wallet `id`, `playerId`, normalized `balance`, and `version`. A zero balance creates only the wallet. A positive balance also creates a processed `OPENING` transaction and a credit ledger entry in the same database transaction.
+
+Example success response:
+
+```json
+{
+  "id": "c04e4200-3f21-4c87-94f1-0e50032cc554",
+  "playerId": "2f986158-4ec9-4c7f-8ca1-f790a83af8df",
+  "balance": "25.50",
+  "version": 1
+}
+```
+
+Errors use this format:
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "O campo playerId deve ser um UUID válido."
+}
+```
+
+This challenge endpoint has no authentication or request limits. It is not safe for public exposure. Add authentication and request limiting before deploying it publicly.
+
+## PostgreSQL integration tests
+
+Start the disposable PostgreSQL service, run the integration tests, then remove the service and its data:
+
+```bash
+$ bun run test:integration:db:up
+$ bun run test:integration
+$ bun run test:integration:db:down
+```
+
+The test database uses port `5434` by default and has no persistent volume.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

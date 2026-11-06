@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-wagering_test}
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-wagering_test}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-wagering_test}
+    ports:
+      - "${POSTGRES_TEST_PORT:-5434}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_TEST_USER:-wagering_test} -d ${POSTGRES_TEST_DB:-wagering_test}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10

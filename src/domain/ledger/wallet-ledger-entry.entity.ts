@@ -1,4 +1,3 @@
-
 import {
   Entity,
   Check,
@@ -8,26 +7,22 @@ import {
   Property,
   Unique,
   type Rel,
-} from "@mikro-orm/core";
+} from '@mikro-orm/core';
 
-import { type Currency, Money } from "../shared/money.js";
+import { type Currency, Money } from '../shared/money.js';
 import {
   InvalidLedgerAmountError,
   LedgerCurrencyMismatchError,
   NegativeLedgerBalanceError,
   UnbalancedLedgerEntryError,
-} from "../shared/errors.js";
-import { Wallet } from "../wallet/wallet.entity.js";
-import { WagerTransaction } from "../wagering/wager-transaction.entity.js";
+} from '../shared/errors.js';
+import { Wallet } from '../wallet/wallet.entity.js';
+import { WagerTransaction } from '../wagering/wager-transaction.entity.js';
 
-export type LedgerEntryDirection = "DEBIT" | "CREDIT";
+export type LedgerEntryDirection = 'DEBIT' | 'CREDIT';
 
 export type LedgerEntryType =
-  | "BET"
-  | "WIN"
-  | "LOSS"
-  | "REFUND"
-  | "ROLLBACK";
+  'OPENING' | 'BET' | 'WIN' | 'LOSS' | 'REFUND' | 'ROLLBACK';
 
 export type LedgerEntryState = {
   id: string;
@@ -56,68 +51,68 @@ export type CreateLedgerEntryProps = {
   createdAt: Date;
 };
 
-@Entity({ tableName: "wallet_ledger_entries" })
+@Entity({ tableName: 'wallet_ledger_entries' })
 @Check({
-  name: "chk_ledger_money_positive",
+  name: 'chk_ledger_money_positive',
   expression: (columns) => `${columns.moneyAmount} > 0`,
 })
 @Check({
-  name: "chk_ledger_balance_non_negative",
+  name: 'chk_ledger_balance_non_negative',
   expression: (columns) =>
     `${columns.balanceBeforeAmount} >= 0 and ${columns.balanceAfterAmount} >= 0`,
 })
 @Check({
-  name: "chk_ledger_currency_consistency",
+  name: 'chk_ledger_currency_consistency',
   expression: (columns) =>
     `${columns.moneyCurrency} = ${columns.balanceBeforeCurrency} and ${columns.moneyCurrency} = ${columns.balanceAfterCurrency}`,
 })
 @Unique({
-  name: "uq_wallet_ledger_entries_wallet_transaction",
-  properties: ["wallet", "transaction"],
+  name: 'uq_wallet_ledger_entries_wallet_transaction',
+  properties: ['wallet', 'transaction'],
 })
 @Index({
-  name: "idx_wallet_ledger_entries_transaction",
-  properties: ["transaction"],
+  name: 'idx_wallet_ledger_entries_transaction',
+  properties: ['transaction'],
 })
 export class WalletLedgerEntry {
-  @PrimaryKey({ type: "uuid" })
+  @PrimaryKey({ type: 'uuid' })
   public readonly id!: string;
 
-  @ManyToOne(() => Wallet, { updateRule: "no action" })
+  @ManyToOne(() => Wallet, { updateRule: 'no action' })
   public readonly wallet!: Rel<Wallet>;
 
   @ManyToOne(() => WagerTransaction, {
-    inversedBy: "ledgerEntries",
-    joinColumn: "transaction_id",
-    updateRule: "no action",
+    inversedBy: 'ledgerEntries',
+    joinColumn: 'transaction_id',
+    updateRule: 'no action',
   })
   public readonly transaction!: Rel<WagerTransaction>;
 
-  @Property({ columnType: "varchar(10)" })
+  @Property({ columnType: 'varchar(10)' })
   public readonly type!: LedgerEntryType;
 
-  @Property({ columnType: "varchar(10)" })
+  @Property({ columnType: 'varchar(10)' })
   public readonly direction!: LedgerEntryDirection;
 
-  @Property({ columnType: "numeric(18,2)" })
+  @Property({ columnType: 'numeric(18,2)' })
   public readonly moneyAmount!: string;
 
-  @Property({ columnType: "varchar(3)" })
+  @Property({ columnType: 'varchar(3)' })
   public readonly moneyCurrency!: Currency;
 
-  @Property({ columnType: "numeric(18,2)" })
+  @Property({ columnType: 'numeric(18,2)' })
   public readonly balanceBeforeAmount!: string;
 
-  @Property({ columnType: "varchar(3)" })
+  @Property({ columnType: 'varchar(3)' })
   public readonly balanceBeforeCurrency!: Currency;
 
-  @Property({ columnType: "numeric(18,2)" })
+  @Property({ columnType: 'numeric(18,2)' })
   public readonly balanceAfterAmount!: string;
 
-  @Property({ columnType: "varchar(3)" })
+  @Property({ columnType: 'varchar(3)' })
   public readonly balanceAfterCurrency!: Currency;
 
-  @Property({ columnType: "timestamptz" })
+  @Property({ columnType: 'timestamptz' })
   public readonly createdAt!: Date;
 
   private constructor(props: CreateLedgerEntryProps) {
@@ -158,10 +153,7 @@ export class WalletLedgerEntry {
       );
     }
 
-    if (
-      props.balanceBefore.isNegative() ||
-      props.balanceAfter.isNegative()
-    ) {
+    if (props.balanceBefore.isNegative() || props.balanceAfter.isNegative()) {
       throw new NegativeLedgerBalanceError();
     }
 
@@ -185,10 +177,7 @@ export class WalletLedgerEntry {
       transaction,
       type: state.type,
       direction: state.direction,
-      money: Money.rehydrate(
-        state.moneyAmount,
-        state.moneyCurrency,
-      ),
+      money: Money.rehydrate(state.moneyAmount, state.moneyCurrency),
       balanceBefore: Money.rehydrate(
         state.balanceBeforeAmount,
         state.balanceBeforeCurrency,
@@ -203,7 +192,7 @@ export class WalletLedgerEntry {
 
   isBalanced(): boolean {
     const expected =
-      this.direction === "DEBIT"
+      this.direction === 'DEBIT'
         ? this.balanceBefore.subtract(this.money)
         : this.balanceBefore.add(this.money);
 
@@ -211,10 +200,7 @@ export class WalletLedgerEntry {
   }
 
   get money(): Money {
-    return Money.rehydrate(
-      this.moneyAmount,
-      this.moneyCurrency,
-    );
+    return Money.rehydrate(this.moneyAmount, this.moneyCurrency);
   }
 
   get transactionId(): string {
@@ -229,9 +215,6 @@ export class WalletLedgerEntry {
   }
 
   get balanceAfter(): Money {
-    return Money.rehydrate(
-      this.balanceAfterAmount,
-      this.balanceAfterCurrency,
-    );
+    return Money.rehydrate(this.balanceAfterAmount, this.balanceAfterCurrency);
   }
 }

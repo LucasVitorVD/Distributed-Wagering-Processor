@@ -1,6 +1,8 @@
-import { Decimal } from "decimal.js";
+import { Decimal } from 'decimal.js';
 
 const DECIMAL_PLACES = 2;
+export const MAX_MONEY_AMOUNT = '9999999999999999.99';
+const MAX_AMOUNT = new Decimal(MAX_MONEY_AMOUNT);
 
 // Entrada de negócio (from): não permite zeros à esquerda, não permite negativo
 const MONEY_PATTERN_INPUT = /^(0|[1-9]\d*)(\.\d{1,2})?$/;
@@ -8,26 +10,26 @@ const MONEY_PATTERN_INPUT = /^(0|[1-9]\d*)(\.\d{1,2})?$/;
 // Reidratação (rehydrate): permite sinal negativo opcional, não permite zeros à esquerda
 const MONEY_PATTERN_REHYDRATE = /^-?(0|[1-9]\d*)(\.\d{1,2})?$/;
 
-const SUPPORTED_CURRENCIES = ["BRL", "USD", "EUR"] as const;
+const SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
 
 export type Currency = (typeof SUPPORTED_CURRENCIES)[number];
 
 export class InvalidMoneyError extends Error {
-  public readonly code = "INVALID_MONEY";
+  public readonly code = 'INVALID_MONEY';
 
   constructor(amount: unknown, reason: string) {
-    const safeAmount = typeof amount === "string" ? amount : String(amount);
+    const safeAmount = typeof amount === 'string' ? amount : String(amount);
     super(`Valor monetário inválido ${safeAmount}: ${reason}`);
-    this.name = "InvalidMoneyError";
+    this.name = 'InvalidMoneyError';
   }
 }
 
 export class DifferentCurrencyError extends Error {
-  public readonly code = "DIFFERENT_CURRENCY";
+  public readonly code = 'DIFFERENT_CURRENCY';
 
   constructor(a: Currency, b: Currency) {
     super(`Moedas incompatíveis: ${a} vs ${b}`);
-    this.name = "DifferentCurrencyError";
+    this.name = 'DifferentCurrencyError';
   }
 }
 
@@ -40,13 +42,20 @@ export class Money {
   private constructor(
     private readonly value: Decimal,
     public readonly currency: Currency,
-  ) {}
+  ) {
+    if (value.abs().greaterThan(MAX_AMOUNT)) {
+      throw new InvalidMoneyError(
+        value.toFixed(DECIMAL_PLACES),
+        `valor excede o máximo permitido de ${MAX_MONEY_AMOUNT}`,
+      );
+    }
+  }
 
   static from(props: MoneyProps): Money {
     const { amount, currency } = props;
 
-    if (typeof amount !== "string" || amount.trim() === "") {
-      throw new InvalidMoneyError(amount, "string vazia ou não é uma string");
+    if (typeof amount !== 'string' || amount.trim() === '') {
+      throw new InvalidMoneyError(amount, 'string vazia ou não é uma string');
     }
 
     const trimmed = amount.trim();
@@ -54,7 +63,7 @@ export class Money {
     if (!MONEY_PATTERN_INPUT.test(trimmed)) {
       throw new InvalidMoneyError(
         amount,
-        "formato decimal inválido (aceita até 2 casas decimais, sem sinal negativo, sem zeros à esquerda)",
+        'formato decimal inválido (aceita até 2 casas decimais, sem sinal negativo, sem zeros à esquerda)',
       );
     }
 
@@ -64,17 +73,24 @@ export class Money {
     try {
       decimal = new Decimal(trimmed);
     } catch {
-      throw new InvalidMoneyError(amount, "não é um número decimal válido");
+      throw new InvalidMoneyError(amount, 'não é um número decimal válido');
     }
 
     if (!decimal.isFinite() || decimal.isNaN()) {
-      throw new InvalidMoneyError(amount, "NaN ou Infinity não são permitidos");
+      throw new InvalidMoneyError(amount, 'NaN ou Infinity não são permitidos');
     }
 
     if (decimal.isNegative()) {
       throw new InvalidMoneyError(
         amount,
-        "valor negativo não permitido na entrada",
+        'valor negativo não permitido na entrada',
+      );
+    }
+
+    if (decimal.greaterThan(MAX_AMOUNT)) {
+      throw new InvalidMoneyError(
+        amount,
+        `valor excede o máximo permitido de ${MAX_MONEY_AMOUNT}`,
       );
     }
 
@@ -88,8 +104,8 @@ export class Money {
   }
 
   static rehydrate(amount: string, currency: string): Money {
-    if (typeof amount !== "string" || amount.trim() === "") {
-      throw new InvalidMoneyError(amount, "string vazia ou não é uma string");
+    if (typeof amount !== 'string' || amount.trim() === '') {
+      throw new InvalidMoneyError(amount, 'string vazia ou não é uma string');
     }
 
     const trimmed = amount.trim();
@@ -97,7 +113,7 @@ export class Money {
     if (!MONEY_PATTERN_REHYDRATE.test(trimmed)) {
       throw new InvalidMoneyError(
         amount,
-        "formato decimal inválido (aceita até 2 casas decimais, sinal negativo opcional)",
+        'formato decimal inválido (aceita até 2 casas decimais, sinal negativo opcional)',
       );
     }
 
@@ -107,11 +123,18 @@ export class Money {
     try {
       decimal = new Decimal(trimmed);
     } catch {
-      throw new InvalidMoneyError(amount, "não é um número decimal válido");
+      throw new InvalidMoneyError(amount, 'não é um número decimal válido');
     }
 
     if (!decimal.isFinite() || decimal.isNaN()) {
-      throw new InvalidMoneyError(amount, "NaN ou Infinity não são permitidos");
+      throw new InvalidMoneyError(amount, 'NaN ou Infinity não são permitidos');
+    }
+
+    if (decimal.abs().greaterThan(MAX_AMOUNT)) {
+      throw new InvalidMoneyError(
+        amount,
+        `valor excede o máximo permitido de ${MAX_MONEY_AMOUNT}`,
+      );
     }
 
     const normalized = decimal.toFixed(DECIMAL_PLACES);
@@ -119,10 +142,7 @@ export class Money {
     return new Money(new Decimal(normalized), validatedCurrency);
   }
 
-  private static validateCurrency(
-    currency: string,
-    amount: unknown,
-  ): Currency {
+  private static validateCurrency(currency: string, amount: unknown): Currency {
     if (!SUPPORTED_CURRENCIES.includes(currency as Currency)) {
       throw new InvalidMoneyError(amount, `moeda não suportada: ${currency}`);
     }
@@ -148,7 +168,7 @@ export class Money {
   }
 
   isPositive(): boolean {
-    return this.value.isPositive();
+    return this.value.greaterThan(0);
   }
 
   isNegative(): boolean {
