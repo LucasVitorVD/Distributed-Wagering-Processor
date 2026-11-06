@@ -1,313 +1,388 @@
-import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
-import { Money } from '../shared/money.js';
-import { InvalidTransactionStateError } from '../shared/errors.js';
+import {
+  Collection,
+  Entity,
+  ManyToOne,
+  OneToMany,
+  PrimaryKey,
+  Property,
+  type Rel,
+} from "@mikro-orm/core";
+import { Wallet } from "../wallet/wallet.entity.js";
+import { WalletLedgerEntry } from "../ledger/wallet-ledger-entry.entity.js";
+import { type Currency, Money } from "../shared/money.js";
+import { InvalidAmountError, MissingTransactionReferenceError } from "../shared/errors.js";
 
 export enum WagerTransactionKind {
-  Opening = 'OPENING',
-  Bet = 'BET',
-  Win = 'WIN',
-  Loss = 'LOSS',
-  Refund = 'REFUND',
-  Rollback = 'ROLLBACK',
+  Opening = "OPENING",
+  Bet = "BET",
+  Win = "WIN",
+  Loss = "LOSS",
+  Refund = "REFUND",
+  Rollback = "ROLLBACK",
 }
 
 export enum WagerTransactionStatus {
-  Pending = 'PENDING',
-  PendingReference = 'PENDING_REFERENCE',
-  Processed = 'PROCESSED',
-  Rejected = 'REJECTED',
-  Failed = 'FAILED',
+  Pending = "PENDING",
+  PendingReference = "PENDING_REFERENCE",
+  Processed = "PROCESSED",
+  Rejected = "REJECTED",
+  Failed = "FAILED",
 }
 
-export type FailureCode =
-  | 'INSUFFICIENT_BALANCE'
-  | 'DUPLICATE_REFERENCE_REVERSAL'
-  | 'MISSING_REFERENCE'
-  | 'INVALID_REFERENCE'
-  | 'WALLET_CURRENCY_MISMATCH'
-  | 'INTERNAL_ERROR';
+export enum FailureCode {
+  INTERNAL_ERROR = "INTERNAL_ERROR",
+  SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
+  PROCESSING_TIMEOUT = "PROCESSING_TIMEOUT",
+
+  INVALID_AMOUNT = "INVALID_AMOUNT",
+  CURRENCY_MISMATCH = "CURRENCY_MISMATCH",
+  INVALID_REFERENCE = "INVALID_REFERENCE",
+  MISSING_REFERENCE = "MISSING_REFERENCE",
+  REVERSAL_WOULD_CAUSE_NEGATIVE_BALANCE = "REVERSAL_WOULD_CAUSE_NEGATIVE_BALANCE",
+
+  INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE",
+  DUPLICATE_TRANSACTION = "DUPLICATE_TRANSACTION",
+  IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT",
+}
 
 export type CreateWagerTransactionProps = {
   id: string;
+  wallet: Rel<Wallet>;
   providerId: string;
   externalTransactionId: string;
-  idempotencyKey: string;
-  payloadHash: string;
-  walletId: string;
   playerId: string;
   roundId: string;
   gameId: string;
   kind: WagerTransactionKind;
-  money: Money;
+  amount: Money;
+  idempotencyKey: string;
+  payloadHash: string;
   referenceExternalTransactionId?: string;
   createdAt: Date;
 };
 
 export type WagerTransactionState = {
   id: string;
+  wallet: Rel<Wallet>;
   providerId: string;
   externalTransactionId: string;
-  idempotencyKey: string;
-  payloadHash: string;
-  walletId: string;
   playerId: string;
   roundId: string;
   gameId: string;
   kind: WagerTransactionKind;
-  moneyAmount: string;
-  moneyCurrency: string;
-  referenceExternalTransactionId: string | null;
-  createdAt: Date;
+  amountAmount: string;
+  amountCurrency: Currency;
   status: WagerTransactionStatus;
+  idempotencyKey: string;
+  payloadHash: string;
+  referenceExternalTransactionId: string | null;
   referenceTransactionId: string | null;
-  failureCode: FailureCode | null;
+  createdAt: Date;
+  updatedAt: Date;
   processedAt: Date | null;
+  failureCode: FailureCode | null;
 };
 
-export type LedgerDirectionResult = {
-  direction: 'DEBIT' | 'CREDIT';
-  affectsBalance: boolean;
-};
-
-/**
- * Transações de aposta. Nasce em PENDING. As transições de estado são
- * explícitas e PROCESSED / REJECTED / FAILED são terminais.
- *
- * Regras de referência:
- * - REFUND só referencia BET.
- * - ROLLBACK referencia BET, WIN ou REFUND.
- * - Uma referência não pode ser revertida duas vezes pelo mesmo tipo.
- */
 @Entity()
 export class WagerTransaction {
-  @PrimaryKey({ type: 'uuid' })
+  @PrimaryKey({ type: "uuid" })
   public readonly id!: string;
 
-  @Property({ type: 'text' })
-  public providerId!: string;
+  @ManyToOne(() => Wallet)
+  public readonly wallet!: Rel<Wallet>;
 
-  @Property({ type: 'text' })
-  public externalTransactionId!: string;
+  @OneToMany(() => WalletLedgerEntry, (entry) => entry.transaction)
+  public ledgerEntries = new Collection<WalletLedgerEntry>(this);
 
-  @Property({ type: 'text' })
-  public idempotencyKey!: string;
+  @Property({ columnType: "varchar(10)" })
+  public readonly kind!: WagerTransactionKind;
 
-  @Property({ type: 'text' })
-  public payloadHash!: string;
+  @Property({ columnType: "numeric(18,2)" })
+  private amountAmount!: string;
 
-  @Property({ type: 'text' })
-  public walletId!: string;
+  @Property({ columnType: "varchar(3)" })
+  private amountCurrency!: Currency;
 
-  @Property({ type: 'text' })
-  public playerId!: string;
+  @Property({ columnType: "varchar(30)", fieldName: "status" })
+  private _status!: WagerTransactionStatus;
 
-  @Property({ type: 'text' })
-  public roundId!: string;
+  @Property({ type: "text", unique: true })
+  public readonly idempotencyKey!: string;
 
-  @Property({ type: 'text' })
-  public gameId!: string;
+  @Property({ type: "text" })
+  public readonly payloadHash!: string;
 
-  @Property({ type: 'varchar', length: 20 })
-  public kind!: WagerTransactionKind;
+  @Property({
+    type: "text",
+    nullable: true,
+    fieldName: "referenceExternalTransactionId",
+  })
+  private _referenceExternalTransactionId?: string;
 
-  @Property({ type: 'text', columnType: 'text' })
-  public moneyAmount!: string;
+  @Property({
+    type: "text",
+    nullable: true,
+    fieldName: "referenceTransactionId",
+  })
+  private _referenceTransactionId?: string;
 
-  @Property({ type: 'varchar', length: 3 })
-  public moneyCurrency!: string;
+  @Property({ type: "text" })
+  public readonly providerId!: string;
 
-  @Property({ type: 'text', nullable: true })
-  public referenceExternalTransactionId!: string | null;
+  @Property({ type: "text" })
+  public readonly externalTransactionId!: string;
 
-  @Property({ type: 'timestamptz' })
-  public createdAt!: Date;
+  @Property({ type: "text" })
+  public readonly playerId!: string;
 
-  @Property({ type: 'varchar', length: 30 })
-  public status!: WagerTransactionStatus;
+  @Property({ type: "text" })
+  public readonly roundId!: string;
 
-  @Property({ type: 'text', nullable: true })
-  public referenceTransactionId!: string | null;
+  @Property({ type: "text" })
+  public readonly gameId!: string;
 
-  @Property({ type: 'varchar', length: 50, nullable: true })
-  public failureCode!: FailureCode | null;
+  @Property({ columnType: "timestamptz", onCreate: () => new Date() })
+  public readonly createdAt!: Date;
 
-  @Property({ type: 'timestamptz', nullable: true })
-  public processedAt!: Date | null;
+  @Property({
+    columnType: "timestamptz",
+    fieldName: "updatedAt",
+    onCreate: () => new Date(),
+    onUpdate: () => new Date(),
+  })
+  private _updatedAt!: Date;
 
-  /** Não persistido: Money reconstruído a partir das colunas amount/currency. */
-  public get money(): Money {
-    return Money.rehydrate(this.moneyAmount, this.moneyCurrency);
-  }
+  @Property({
+    columnType: "timestamptz",
+    nullable: true,
+    fieldName: "processedAt",
+  })
+  private _processedAt?: Date;
 
-  private constructor(props: CreateWagerTransactionProps & {
-    status: WagerTransactionStatus;
-  }) {
+  @Property({
+    columnType: "varchar(50)",
+    nullable: true,
+    fieldName: "failureCode",
+  })
+  private _failureCode?: FailureCode;
+
+  private constructor(
+    props: CreateWagerTransactionProps,
+    state: Pick<
+      WagerTransactionState,
+      | "status"
+      | "referenceTransactionId"
+      | "updatedAt"
+      | "processedAt"
+      | "failureCode"
+    >,
+  ) {
     this.id = props.id;
-    this.providerId = props.providerId;
-    this.externalTransactionId = props.externalTransactionId;
+    this.wallet = props.wallet;
+    this.kind = props.kind;
+    this.amountAmount = props.amount.toJSON().amount;
+    this.amountCurrency = props.amount.currency;
+    this._status = state.status;
     this.idempotencyKey = props.idempotencyKey;
     this.payloadHash = props.payloadHash;
-    this.walletId = props.walletId;
+    this._referenceExternalTransactionId =
+      props.referenceExternalTransactionId ?? undefined;
+    this._referenceTransactionId = state.referenceTransactionId ?? undefined;
+    this.createdAt = props.createdAt;
+    this._updatedAt = state.updatedAt;
+    this._processedAt = state.processedAt ?? undefined;
+    this._failureCode = state.failureCode ?? undefined;
+    this.providerId = props.providerId;
+    this.externalTransactionId = props.externalTransactionId;
     this.playerId = props.playerId;
     this.roundId = props.roundId;
     this.gameId = props.gameId;
-    this.kind = props.kind;
-    this.moneyAmount = props.money.toJSON().amount;
-    this.moneyCurrency = props.money.currency;
-    this.referenceExternalTransactionId =
-      props.referenceExternalTransactionId ?? null;
-    this.createdAt = props.createdAt;
-    this.status = props.status;
-    this.referenceTransactionId = null;
-    this.failureCode = null;
-    this.processedAt = null;
   }
 
   static create(props: CreateWagerTransactionProps): WagerTransaction {
-    const requiresRef =
+    const requiresReference =
       props.kind === WagerTransactionKind.Refund ||
       props.kind === WagerTransactionKind.Rollback;
 
-    if (requiresRef && !props.referenceExternalTransactionId) {
-      throw new Error(
-        `Transação ${props.kind} exige referenceExternalTransactionId`,
-      );
+    if (
+      requiresReference &&
+      !props.referenceExternalTransactionId?.trim()
+    ) {
+      throw new MissingTransactionReferenceError(props.kind);
     }
 
-    // OPENING é interno: não pode ser submetido por API nem fila
+    if (!props.amount.isPositive()) {
+      throw new InvalidAmountError()
+    }
+
     if (props.kind === WagerTransactionKind.Opening) {
-      throw new Error('OPENING é uma transação interna e não pode ser submetida');
+      throw new Error("OPENING transactions can only be created internally");
     }
 
-    return new WagerTransaction({ ...props, status: WagerTransactionStatus.Pending });
+    return new WagerTransaction(props, {
+      status: WagerTransactionStatus.Pending,
+      referenceTransactionId: null,
+      updatedAt: props.createdAt,
+      processedAt: null,
+      failureCode: null,
+    });
   }
 
   static rehydrate(state: WagerTransactionState): WagerTransaction {
-    const tx = new WagerTransaction({
-      id: state.id,
-      providerId: state.providerId,
-      externalTransactionId: state.externalTransactionId,
-      idempotencyKey: state.idempotencyKey,
-      payloadHash: state.payloadHash,
-      walletId: state.walletId,
-      playerId: state.playerId,
-      roundId: state.roundId,
-      gameId: state.gameId,
-      kind: state.kind,
-      money: Money.rehydrate(state.moneyAmount, state.moneyCurrency),
-      referenceExternalTransactionId: state.referenceExternalTransactionId ?? undefined,
-      createdAt: state.createdAt,
-      status: state.status,
-    });
-    tx.referenceTransactionId = state.referenceTransactionId;
-    tx.failureCode = state.failureCode;
-    tx.processedAt = state.processedAt;
-    return tx;
-  }
-
-  get isTerminal(): boolean {
-    return (
-      this.status === WagerTransactionStatus.Processed ||
-      this.status === WagerTransactionStatus.Rejected ||
-      this.status === WagerTransactionStatus.Failed
+    return new WagerTransaction(
+      {
+        id: state.id,
+        wallet: state.wallet,
+        providerId: state.providerId,
+        externalTransactionId: state.externalTransactionId,
+        playerId: state.playerId,
+        roundId: state.roundId,
+        gameId: state.gameId,
+        kind: state.kind,
+        amount: Money.rehydrate(state.amountAmount, state.amountCurrency),
+        idempotencyKey: state.idempotencyKey,
+        payloadHash: state.payloadHash,
+        referenceExternalTransactionId:
+          state.referenceExternalTransactionId ?? undefined,
+        createdAt: state.createdAt,
+      },
+      {
+        status: state.status,
+        referenceTransactionId: state.referenceTransactionId,
+        updatedAt: state.updatedAt,
+        processedAt: state.processedAt,
+        failureCode: state.failureCode,
+      },
     );
   }
 
-  get affectsBalance(): boolean {
+  markProcessed(referenceTransactionId: string | undefined, at: Date): void {
+    this.ensureCanTransition()
+
+    this._status = WagerTransactionStatus.Processed
+    this._referenceTransactionId = referenceTransactionId
+    this._processedAt = at
+    this._updatedAt = at
+  }
+
+  markPendingReference(): void {
+    if (this._status === WagerTransactionStatus.PendingReference) {
+      return;
+    }
+
+    this.ensureCanTransition()
+
+    this._status = WagerTransactionStatus.PendingReference
+    this._updatedAt = new Date();
+  }
+
+  reject(code: FailureCode): void {
+    this.ensureCanTransition()
+
+    this._status = WagerTransactionStatus.Rejected
+    this._failureCode = code
+    this._updatedAt = new Date();
+  }
+
+  fail(code: FailureCode): void {
+    this.ensureCanTransition()
+
+    this._status = WagerTransactionStatus.Failed
+    this._failureCode = code
+    this._updatedAt = new Date();
+  }
+
+  private ensureCanTransition(): void {
+    const allowedStatuses = [
+      WagerTransactionStatus.Pending,
+      WagerTransactionStatus.PendingReference,
+    ];
+
+    if (!allowedStatuses.includes(this._status)) {
+      throw new Error(
+        `Cannot transition transaction from status ${this._status}`,
+      );
+    }
+  }
+
+  isTerminal(): boolean {
+    return [
+      WagerTransactionStatus.Processed,
+      WagerTransactionStatus.Rejected,
+      WagerTransactionStatus.Failed,
+    ].includes(this._status);
+  }
+
+  affectsBalance(): boolean {
     return this.kind !== WagerTransactionKind.Loss;
   }
 
-  get requiresReference(): boolean {
+  requiresReference(): boolean {
     return (
       this.kind === WagerTransactionKind.Refund ||
       this.kind === WagerTransactionKind.Rollback
     );
   }
 
-  matchesPayload(payloadHash: string): boolean {
-    return this.payloadHash === payloadHash;
+  matchesPayload(hash: string): boolean {
+    return this.payloadHash === hash;
   }
 
-  /**
-   * Direção do lançamento no ledger, considerando a transação de referência
-   * (para ROLLBACK, inverte a direção da referência).
-   */
-  ledgerDirectionFor(reference?: WagerTransaction): LedgerDirectionResult {
-    if (this.kind === WagerTransactionKind.Bet) {
-      return { direction: 'DEBIT', affectsBalance: true };
+  ledgerDirectionFor(
+    reference?: WagerTransaction,
+  ): "CREDIT" | "DEBIT" | undefined {
+    switch (this.kind) {
+      case WagerTransactionKind.Opening:
+      case WagerTransactionKind.Win:
+      case WagerTransactionKind.Refund:
+        return "CREDIT";
+
+      case WagerTransactionKind.Bet:
+        return "DEBIT";
+
+      case WagerTransactionKind.Loss:
+        return undefined;
+
+      case WagerTransactionKind.Rollback:
+        if (!reference) {
+          throw new Error("ROLLBACK requires a reference transaction");
+        }
+
+        switch (reference.kind) {
+          case WagerTransactionKind.Bet:
+            return "CREDIT";
+
+          case WagerTransactionKind.Win:
+          case WagerTransactionKind.Refund:
+            return "DEBIT";
+
+          default:
+            throw new Error("Invalid transaction type for ROLLBACK");
+        }
     }
-    if (this.kind === WagerTransactionKind.Win) {
-      return { direction: 'CREDIT', affectsBalance: true };
-    }
-    if (this.kind === WagerTransactionKind.Loss) {
-      return { direction: 'DEBIT', affectsBalance: false };
-    }
-    if (this.kind === WagerTransactionKind.Refund) {
-      return { direction: 'CREDIT', affectsBalance: true };
-    }
-    if (this.kind === WagerTransactionKind.Rollback) {
-      if (!reference) {
-        return { direction: 'DEBIT', affectsBalance: true };
-      }
-      const refDir = reference.ledgerDirectionFor();
-      return {
-        direction: refDir.direction === 'DEBIT' ? 'CREDIT' : 'DEBIT',
-        affectsBalance: refDir.affectsBalance,
-      };
-    }
-    return { direction: 'DEBIT', affectsBalance: true };
   }
 
-  /**
-   * Transição para PROCESSED. Só permitido se não for terminal.
-   */
-  markProcessed(referenceTransactionId: string | undefined, at: Date): void {
-    if (this.isTerminal) {
-      throw new InvalidTransactionStateError(
-        this.id,
-        this.status,
-        WagerTransactionStatus.Processed,
-      );
-    }
-    this.status = WagerTransactionStatus.Processed;
-    this.referenceTransactionId = referenceTransactionId ?? null;
-    this.processedAt = at;
+  get amount(): Money {
+    return Money.rehydrate(this.amountAmount, this.amountCurrency);
   }
 
-  markPendingReference(): void {
-    if (this.isTerminal) {
-      throw new InvalidTransactionStateError(
-        this.id,
-        this.status,
-        WagerTransactionStatus.PendingReference,
-      );
-    }
-    this.status = WagerTransactionStatus.PendingReference;
+  get status(): WagerTransactionStatus {
+    return this._status;
   }
 
-  reject(code: FailureCode): void {
-    if (this.isTerminal) {
-      throw new InvalidTransactionStateError(
-        this.id,
-        this.status,
-        WagerTransactionStatus.Rejected,
-      );
-    }
-    this.status = WagerTransactionStatus.Rejected;
-    this.failureCode = code;
-    this.processedAt = new Date();
+  get referenceTransactionId(): string | undefined {
+    return this._referenceTransactionId;
   }
 
-  fail(code: FailureCode): void {
-    if (this.isTerminal) {
-      throw new InvalidTransactionStateError(
-        this.id,
-        this.status,
-        WagerTransactionStatus.Failed,
-      );
-    }
-    this.status = WagerTransactionStatus.Failed;
-    this.failureCode = code;
-    this.processedAt = new Date();
+  get referenceExternalTransactionId(): string | undefined {
+    return this._referenceExternalTransactionId;
+  }
+
+  get failureCode(): FailureCode | undefined {
+    return this._failureCode;
+  }
+
+  get processedAt(): Date | undefined {
+    return this._processedAt;
   }
 }

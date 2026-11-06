@@ -15,6 +15,7 @@ import {
   UnbalancedLedgerEntryError,
 } from "../shared/errors.js";
 import { Wallet } from "../wallet/wallet.entity.js";
+import { WagerTransaction } from "../wagering/wager-transaction.entity.js";
 
 export type LedgerEntryDirection = "DEBIT" | "CREDIT";
 
@@ -43,7 +44,7 @@ export type LedgerEntryState = {
 export type CreateLedgerEntryProps = {
   id: string;
   wallet: Rel<Wallet>;
-  transactionId: string;
+  transaction: Rel<WagerTransaction>;
   type: LedgerEntryType;
   direction: LedgerEntryDirection;
   money: Money;
@@ -60,8 +61,11 @@ export class WalletLedgerEntry {
   @ManyToOne(() => Wallet)
   public readonly wallet!: Rel<Wallet>;
 
-  @Property({ type: "text" })
-  public readonly transactionId!: string;
+  @ManyToOne(() => WagerTransaction, {
+      inversedBy: "ledgerEntries",
+    joinColumn: "transactionId",
+  })
+  public readonly transaction!: Rel<WagerTransaction>;
 
   @Property({ columnType: "varchar(10)" })
   public readonly type!: LedgerEntryType;
@@ -93,7 +97,7 @@ export class WalletLedgerEntry {
   private constructor(props: CreateLedgerEntryProps) {
     this.id = props.id;
     this.wallet = props.wallet;
-    this.transactionId = props.transactionId;
+    this.transaction = props.transaction;
     this.type = props.type;
     this.direction = props.direction;
 
@@ -147,11 +151,12 @@ export class WalletLedgerEntry {
   static rehydrate(
     state: LedgerEntryState,
     wallet: Rel<Wallet>,
+    transaction: Rel<WagerTransaction>,
   ): WalletLedgerEntry {
     return new WalletLedgerEntry({
       id: state.id,
       wallet,
-      transactionId: state.transactionId,
+      transaction,
       type: state.type,
       direction: state.direction,
       money: Money.rehydrate(
@@ -184,6 +189,10 @@ export class WalletLedgerEntry {
       this.moneyAmount,
       this.moneyCurrency,
     );
+  }
+
+  get transactionId(): string {
+    return this.transaction.id;
   }
 
   get balanceBefore(): Money {

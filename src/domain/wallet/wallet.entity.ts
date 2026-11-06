@@ -1,4 +1,4 @@
-import { Entity } from "@mikro-orm/core";
+import { Collection, Entity, OneToMany } from "@mikro-orm/core";
 import { type Currency, Money } from "../shared/money.js";
 import { PrimaryKey, Property } from "@mikro-orm/core";
 import {
@@ -7,6 +7,8 @@ import {
   InvalidAmountError,
   InvalidInitialBalanceError,
 } from "../shared/errors.js";
+import { WagerTransaction } from "../wagering/wager-transaction.entity.js";
+import { WalletLedgerEntry } from "../ledger/wallet-ledger-entry.entity.js";
 
 interface OpenWalletProps {
   id: string;
@@ -25,7 +27,7 @@ export class Wallet {
 
   @Property({ columnType: "numeric(18, 2)" })
   private balanceAmount!: string
-  
+
   @Property({ columnType: "varchar", length: 3 })
   public readonly balanceCurrency!: Currency
 
@@ -37,6 +39,13 @@ export class Wallet {
 
   @Property({ columnType: "timestamptz", onCreate: () => new Date(), onUpdate: () => new Date() })
   private _updatedAt!: Date
+
+  @OneToMany(() => WagerTransaction, transaction => transaction.wallet)
+  public transactions = new Collection<WagerTransaction>(this);
+
+  @OneToMany(() => WalletLedgerEntry, entry => entry.wallet)
+  public ledgerEntries = new Collection<WalletLedgerEntry>(this);
+
 
   private constructor(id: string, playerId: string, balanceAmount: string, balanceCurrency: Currency) {
     this.id = id;
@@ -51,8 +60,8 @@ export class Wallet {
     }
 
     return new Wallet(
-      props.id, 
-      props.playerId, 
+      props.id,
+      props.playerId,
       props.initialBalance.toJSON().amount,
       props.initialBalance.currency
     );

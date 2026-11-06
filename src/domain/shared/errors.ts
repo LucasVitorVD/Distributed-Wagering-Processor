@@ -50,6 +50,15 @@ export class InvalidTransactionStateError extends DomainError {
   }
 }
 
+export class MissingTransactionReferenceError extends DomainError {
+  constructor(type: string) {
+    super(
+      "MISSING_TRANSACTION_REFERENCE",
+      `Transação do tipo ${type} exige uma referência externa`,
+    );
+  }
+}
+
 export class InvalidLedgerAmountError extends DomainError {
   constructor() {
     super("INVALID_LEDGER_AMOUNT", "O valor do lançamento deve ser positivo");
