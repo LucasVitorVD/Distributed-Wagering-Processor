@@ -14,7 +14,10 @@ import {
 } from '../../domain/shared/money.js';
 import {
   DomainError,
+  DuplicateWagerTransactionError,
+  IdempotencyConflictError,
   WalletNotFoundError,
+  WagerTransactionNotFoundError,
 } from '../../domain/shared/errors.js';
 
 interface ApiErrorResponse {
@@ -43,6 +46,25 @@ export class ApiExceptionFilter implements ExceptionFilter {
   }
 
   private toResponse(exception: unknown): ApiErrorResponse {
+    if (
+      exception instanceof IdempotencyConflictError ||
+      exception instanceof DuplicateWagerTransactionError
+    ) {
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        code: exception.code,
+        message: exception.message,
+      };
+    }
+
+    if (exception instanceof WagerTransactionNotFoundError) {
+      return {
+        statusCode: HttpStatus.NOT_FOUND,
+        code: exception.code,
+        message: exception.message,
+      };
+    }
+
     if (
       exception instanceof UniqueConstraintViolationException &&
       this.getConstraintName(exception) === 'uq_wallets_player_currency'

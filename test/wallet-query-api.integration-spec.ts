@@ -7,6 +7,8 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import config from '../src/config/mikro-orm.config.js';
 import { configureApplication } from '../src/common/configure-application.js';
+import { HealthModule } from '../src/health/health.module.js';
+import { SQS_READINESS_CLIENT } from '../src/health/health.tokens.js';
 import { WalletLedgerEntry } from '../src/domain/ledger/wallet-ledger-entry.entity.js';
 import { Money } from '../src/domain/shared/money.js';
 import { Wallet } from '../src/domain/wallet/wallet.entity.js';
@@ -37,9 +39,19 @@ describe('wallet query API with PostgreSQL', () => {
   let orm: MikroORM;
 
   beforeAll(async () => {
-    const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [MikroOrmModule.forRoot(databaseConfig), WalletsModule],
-    }).compile();
+    const moduleBuilder = Test.createTestingModule({
+      imports: [
+        MikroOrmModule.forRoot(databaseConfig),
+        WalletsModule,
+        HealthModule,
+      ],
+    })
+      .overrideProvider(SQS_READINESS_CLIENT)
+      .useValue({
+        getQueueAttributes: async () => undefined,
+        destroy: () => undefined,
+      });
+    const moduleRef: TestingModule = await moduleBuilder.compile();
 
     app = moduleRef.createNestApplication();
     configureApplication(app);
@@ -85,6 +97,9 @@ describe('wallet query API with PostgreSQL', () => {
         payloadHash: `payload-${transactionId}`,
         createdAt,
       });
+      transaction.recordResultingBalance(
+        Money.from({ amount: '1.00', currency: 'BRL' }),
+      );
       const entry = WalletLedgerEntry.create({
         id,
         wallet,
@@ -143,6 +158,108 @@ describe('wallet query API with PostgreSQL', () => {
       nextCursor: null,
       limit: 50,
     });
+  });
+
+  it('reconciles the stored wallet balance against its ledger', async () => {
+    const wallet = await createWallet('25.50');
+    const response = await request(app.getHttpServer())
+      .post(`/wallets/${wallet.id}/reconciliation`)
+      .send();
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      walletId: wallet.id,
+      storedBalance: { amount: '25.50', currency: 'BRL' },
+      calculatedBalance: { amount: '25.50', currency: 'BRL' },
+      difference: { amount: '0.00', currency: 'BRL' },
+      consistent: true,
+      checkedEntries: 1,
+    });
+  });
+
+  it('reports readiness when PostgreSQL and SQS are available', async () => {
+    const originalQueueUrl = process.env.SQS_QUEUE_URL;
+    process.env.SQS_QUEUE_URL =
+      'https://sqs.example.test/123/wagering-test-queue';
+
+    try {
+      const response = await request(app.getHttpServer()).get('/health/ready');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        status: 'ok',
+        checks: { database: 'up', sqs: 'up' },
+      });
+    } finally {
+      if (originalQueueUrl === undefined) {
+        delete process.env.SQS_QUEUE_URL;
+      } else {
+        process.env.SQS_QUEUE_URL = originalQueueUrl;
+      }
+    }
+  });
+
+  it('reports ledger mismatches, increments the metric, and leaves the wallet unchanged', async () => {
+    const wallet = await createWallet('25.50');
+    const em = orm.em.fork();
+    const walletEntity = await em.findOneOrFail(Wallet, { id: wallet.id });
+    const transactionId = randomUUID();
+    const amount = Money.from({ amount: '2.50', currency: 'BRL' });
+    const transaction = WagerTransaction.create({
+      id: transactionId,
+      wallet: walletEntity,
+      providerId: `provider-${transactionId}`,
+      externalTransactionId: `external-${transactionId}`,
+      playerId: walletEntity.playerId,
+      roundId: `round-${transactionId}`,
+      gameId: `game-${transactionId}`,
+      kind: WagerTransactionKind.Win,
+      amount,
+      idempotencyKey: `idempotency-${transactionId}`,
+      payloadHash: `payload-${transactionId}`,
+      createdAt: new Date(),
+    });
+    transaction.recordResultingBalance(
+      Money.from({ amount: '28.00', currency: 'BRL' }),
+    );
+    const entry = WalletLedgerEntry.create({
+      id: randomUUID(),
+      wallet: walletEntity,
+      transaction,
+      type: 'WIN',
+      direction: 'CREDIT',
+      money: amount,
+      balanceBefore: Money.from({ amount: '25.50', currency: 'BRL' }),
+      balanceAfter: Money.from({ amount: '28.00', currency: 'BRL' }),
+      createdAt: new Date(),
+    });
+    em.persist([transaction, entry]);
+    await em.flush();
+
+    const response = await request(app.getHttpServer())
+      .post(`/wallets/${wallet.id}/reconciliation`)
+      .send();
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      walletId: wallet.id,
+      storedBalance: { amount: '25.50', currency: 'BRL' },
+      calculatedBalance: { amount: '28.00', currency: 'BRL' },
+      difference: { amount: '2.50', currency: 'BRL' },
+      consistent: false,
+      checkedEntries: 2,
+    });
+
+    const unchangedWallet = await request(app.getHttpServer()).get(
+      `/wallets/${wallet.id}`,
+    );
+    expect(unchangedWallet.body.balance).toEqual({
+      amount: '25.50',
+      currency: 'BRL',
+    });
+
+    const metrics = await request(app.getHttpServer()).get('/metrics');
+    expect(metrics.text).toContain('wallet_reconciliation_mismatches_total 1');
   });
 
   it('returns opening entries with all money values and timestamps', async () => {
@@ -206,6 +323,9 @@ describe('wallet query API with PostgreSQL', () => {
       payloadHash: `payload-${transactionId}`,
       createdAt,
     });
+    transaction.recordResultingBalance(
+      Money.from({ amount: '1.00', currency: 'BRL' }),
+    );
     const newerEntry = WalletLedgerEntry.create({
       id: newerId,
       wallet: walletEntity,

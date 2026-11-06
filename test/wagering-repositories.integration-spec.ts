@@ -44,7 +44,7 @@ function createTransaction(
 ): WagerTransaction {
   const id = randomUUID();
 
-  return WagerTransaction.create({
+  const transaction = WagerTransaction.create({
     id,
     wallet,
     providerId: `provider-${randomUUID()}`,
@@ -59,6 +59,8 @@ function createTransaction(
     createdAt: new Date(),
     ...overrides,
   });
+  transaction.recordResultingBalance(wallet.balance);
+  return transaction;
 }
 
 function createLedgerEntry(

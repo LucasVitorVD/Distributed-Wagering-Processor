@@ -6,6 +6,8 @@ import type { WagerTransaction } from '../wagering/wager-transaction.entity.js';
 export interface WalletRepository {
   findById(id: string): Promise<Wallet | null>;
 
+  findByIdForUpdate(id: string): Promise<Wallet | null>;
+
   findByPlayerAndCurrency(
     playerId: string,
     currency: Currency,
@@ -20,6 +22,8 @@ export interface WalletRepository {
 }
 
 export interface WagerTransactionRepository {
+  findById(id: string): Promise<WagerTransaction | null>;
+
   findByIdempotencyKey(
     idempotencyKey: string,
   ): Promise<WagerTransaction | null>;
@@ -28,6 +32,11 @@ export interface WagerTransactionRepository {
     providerId: string,
     externalTransactionId: string,
   ): Promise<WagerTransaction | null>;
+
+  findByProviderAndReferenceExternalTransactionId(
+    providerId: string,
+    referenceExternalTransactionId: string,
+  ): Promise<readonly WagerTransaction[]>;
 
   save(transaction: WagerTransaction): void;
 }
@@ -42,6 +51,8 @@ export interface WalletLedgerEntryRepository {
   findByTransactionId(
     transactionId: string,
   ): Promise<readonly WalletLedgerEntry[]>;
+
+  findByWallet(walletId: string): Promise<readonly WalletLedgerEntry[]>;
 
   add(entry: WalletLedgerEntry): void;
 }

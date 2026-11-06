@@ -14,6 +14,8 @@ _Estas são recomendações para organizar o build, não requisitos. Você decid
 | 1 | BET repositories | Bet processing | in-progress |
 | 2 | Wallet creation | Wallets | in-progress |
 | 3 | Wallet reads | Wallets | in-progress |
+| 4 | Wagering transaction API | Bet processing | in-progress |
+| 5 | Provider authentication and request limits | Security | planned |
 
 ## Bet processing
 
@@ -29,6 +31,27 @@ Criar contratos de domínio e adapters MikroORM para ler e persistir carteiras, 
 - [ ] Test it: `/test BET repositories`
 Spec [0001](../specs/0001-bet-repositories/index.md)
 Code in: `src/domain/repositories`, `src/infrastructure/persistence`, `test/wagering-repositories.integration-spec.ts`
+
+### 4. Wagering transaction API · in-progress
+Expor consultas por ID interno e por referência do provedor, além do POST síncrono para todos os tipos externos.
+**Done when:** GETs retornam a mesma representação; POST aceita todos os tipos externos e aplica as regras de saldo e referência; a resposta contém `transactionId`, `status`, `balance` e `idempotentReplay`; o saldo do resultado é persistido para replay estável; chave e hash garantem replay seguro; gravações são atômicas e os conflitos, falhas e limites de segurança estão documentados e testados.
+- [x] Design it (spec): `/architect API de transações de wagering` [0004](../specs/0004-wagering-transactions-api/index.md)
+- [x] Build it: `/develop wagering transaction API`
+  - [x] Consultas GET e representação sem dados internos (AC-1, AC-2, AC-11)
+  - [x] Fluxo BET síncrono com validação, hash e replay (AC-3, AC-4, AC-8, AC-9)
+  - [x] Tipos externos, referências, rejeições e limites acumulados (AC-5, AC-6, AC-7)
+  - [x] Corridas de unicidade, erros, testes e documentação (AC-10, AC-12, AC-13)
+  - [x] Saldo de resultado persistido e formato compacto do POST com replay estável (AC-4, AC-7, AC-9, AC-11)
+- [ ] Verify it: `/check verify wagering transaction API`
+- [ ] Test it: `/test wagering transaction API`
+Code in: `src/wagering`, `src/domain/wagering`, `src/domain/repositories`, `src/infrastructure/persistence`, `src/common/filters`, `test/wagering-transactions-api.integration-spec.ts`, `README.md`
+
+## Security
+
+### 5. Provider authentication and request limits · needs a decision
+Adicionar autenticação de provedor, escopo de acesso e limite de chamadas antes de expor as rotas publicamente. Derivado da spec 0004.
+**Done when:** a identidade do provedor é verificada; consultas e alterações ficam limitadas aos dados do provedor; limites de chamadas e testes de acesso estão definidos.
+- [ ] Design it (spec): `/architect autenticação de provedor e limites de requisição`
 
 ## Wallets
 

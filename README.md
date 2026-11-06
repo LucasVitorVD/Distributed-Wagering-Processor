@@ -119,6 +119,106 @@ This challenge endpoint has no authentication or request limits. It is not safe 
 
 The wallet read routes also have no authentication, wallet ownership check, or request limits. The README warning does not restrict access, so keep the service available only to challenge evaluation. Add authentication, ownership checks, and request limiting before public exposure.
 
+## Submit and read wagering transactions
+
+`POST /wagering/transactions` accepts `BET`, `WIN`, `LOSS`, `REFUND`, and `ROLLBACK`. `OPENING` is created only when a wallet starts with a positive balance. Send the required `Idempotency-Key` header with every request. A recommended value is `{providerId}:{externalTransactionId}`.
+
+Example request:
+
+```http
+POST /wagering/transactions
+Idempotency-Key: provider-a:transaction-123
+Content-Type: application/json
+```
+
+```json
+{
+  "providerId": "provider-a",
+  "externalTransactionId": "transaction-123",
+  "playerId": "2f986158-4ec9-4c7f-8ca1-f790a83af8df",
+  "roundId": "round-42",
+  "gameId": "game-7",
+  "kind": "BET",
+  "amount": {
+    "amount": "5.00",
+    "currency": "BRL"
+  }
+}
+```
+
+The route returns `200 OK` with `transactionId`, `status`, the balance immediately after the outcome, and `idempotentReplay`. A first request has `idempotentReplay: false`. Repeating the same key and business data returns the saved outcome balance with `idempotentReplay: true`, even if the wallet has changed since the first request. Reusing the key with different business data returns `409 IDEMPOTENCY_CONFLICT`. Reusing the provider and external transaction IDs with another key returns `409 DUPLICATE_TRANSACTION`.
+
+A business rejection, such as an insufficient balance or unavailable reference, is stored as `REJECTED`, with the unchanged balance, and returned with `200 OK`. An unknown player wallet returns `404 WALLET_NOT_FOUND` and does not reserve the key.
+
+Example response:
+
+This example assumes the wallet had `25.00 BRL` before the `5.00 BRL` BET.
+
+```json
+{
+  "transactionId": "c0fd57c1-3a77-4e1b-8673-5fc0fb3cafbe",
+  "status": "PROCESSED",
+  "balance": {
+    "amount": "20.00",
+    "currency": "BRL"
+  },
+  "idempotentReplay": false
+}
+```
+
+`REFUND` and `ROLLBACK` require `referenceExternalTransactionId`. A refund must refer to a processed bet from the same provider, player, and wallet. Partial refunds are allowed, but their net total cannot exceed the bet. A rollback must exactly reverse one processed bet, win, or refund. Each transaction can be rolled back once. A bet with a net refund cannot also be rolled back.
+
+The payload hash is lowercase hexadecimal SHA 256 of compact JSON encoded as UTF 8. Object keys are sorted recursively in ascending order. The hash includes the provider ID, external transaction ID, player ID, round ID, game ID, kind, amount, currency, and reference ID when present. The amount is normalized to two decimal places. Other business strings keep their exact validated values. The `Idempotency-Key` header and HTTP metadata are excluded.
+
+Use `GET /wagering/transactions/:transactionId` to look up a transaction by its internal UUID. Use `GET /providers/:providerId/wagering/transactions/:externalTransactionId` to look it up by provider identity. Both GET routes return the expanded transaction details, including the wallet, provider reference, amount, and failure code. They do not return the idempotency key or payload hash.
+
+These challenge routes do not authenticate providers, check ownership, or limit request rates. Provider IDs in requests are claimed values, not verified identities. Keep the service limited to challenge evaluation. Add provider authentication, access scope, and request limiting before public exposure.
+
+## Reconcile a wallet
+
+`POST /wallets/:walletId/reconciliation` compares the wallet's stored balance with the sum of its ledger entries. The ledger is read while the wallet row is locked, so another wallet transaction cannot change the balance during the check. The endpoint never changes the wallet or its ledger.
+
+`difference` is `calculatedBalance - storedBalance`. A zero difference sets `consistent` to `true`. A mismatch returns `200 OK` with `consistent: false`, logs a warning, and increments `wallet_reconciliation_mismatches_total`. The counter is available at `GET /metrics` in Prometheus text format.
+
+Example response:
+
+```json
+{
+  "walletId": "0192f291-27dd-7d3f-8071-5f8685deef37",
+  "storedBalance": { "amount": "975.00", "currency": "BRL" },
+  "calculatedBalance": { "amount": "975.00", "currency": "BRL" },
+  "difference": { "amount": "0.00", "currency": "BRL" },
+  "consistent": true,
+  "checkedEntries": 42
+}
+```
+
+## Health checks
+
+`GET /health/live` returns `200 OK` while the application process is running. It does not check dependencies.
+
+`GET /health/ready` returns `200 OK` only when PostgreSQL accepts a query and SQS responds to `GetQueueAttributes` for the configured queue. It returns `503 Service Unavailable` when either dependency is down or the queue URL is missing.
+
+Set `AWS_REGION` to the AWS region and `SQS_QUEUE_URL` to the queue URL. The AWS identity needs `sqs:GetQueueAttributes` for that queue. `SQS_ENDPOINT` is an optional endpoint override for local SQS-compatible services.
+
+The AWS SDK uses its standard credential provider chain. Do not put credentials in the README or source code.
+
+## Application metrics and logs
+
+The application exposes Prometheus metrics at `GET /metrics`. Implemented wagering metrics are:
+
+- `wagering_transactions_total{status}` counts new transactions by terminal status. Replays are counted separately.
+- `wagering_duplicate_transactions_total` counts duplicate provider transaction identities.
+- `wagering_idempotency_conflicts_total` counts idempotency keys reused with a different payload.
+- `wagering_transaction_retries_total` counts matching idempotent replays.
+- `wagering_lock_conflicts_total` counts PostgreSQL deadlocks, unavailable locks, and serialization failures.
+- `wagering_transaction_processing_duration_seconds` measures synchronous transaction request processing.
+- `wallet_reconciliation_mismatches_total` counts inconsistent wallet reconciliations.
+
+Application logs are one JSON object per line. Each record includes `correlationId`, `messageId`, `transactionId`, `walletId`, and `providerId`; fields that do not apply are `null`. HTTP requests accept a safe `x-correlation-id` value or receive a generated UUID, returned in the response header. `messageId` remains `null` because the current service does not consume queue messages. Logs avoid request bodies, monetary amounts, and idempotency keys.
+
+DLQ message counts and outbox lag are not implemented because the project has no queue consumer, dead letter queue, or outbox. OpenTelemetry export and dashboards are also not configured.
+
 ## PostgreSQL integration tests
 
 Start the disposable PostgreSQL service, run the integration tests, then remove the service and its data:

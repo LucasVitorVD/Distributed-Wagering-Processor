@@ -19,18 +19,22 @@ describe('WalletCreationService', () => {
     const repositories: WageringRepositories = {
       wallets: {
         findById: async () => null,
+        findByIdForUpdate: async () => null,
         findByPlayerAndCurrency: async () => null,
         findByPlayerAndCurrencyForUpdate: async () => null,
         save: (wallet) => wallets.push(wallet),
       },
       wagerTransactions: {
+        findById: async () => null,
         findByIdempotencyKey: async () => null,
         findByProviderAndExternalTransactionId: async () => null,
+        findByProviderAndReferenceExternalTransactionId: async () => [],
         save: (transaction) => transactions.push(transaction),
       },
       ledgerEntries: {
         findByWalletAfter: async () => [],
         findByTransactionId: async () => [],
+        findByWallet: async () => [],
         add: (entry) => entries.push(entry),
       },
     };

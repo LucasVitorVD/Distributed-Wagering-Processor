@@ -14,6 +14,30 @@ export class WalletNotFoundError extends DomainError {
   }
 }
 
+export class WagerTransactionNotFoundError extends DomainError {
+  constructor() {
+    super('WAGER_TRANSACTION_NOT_FOUND', 'Transação não encontrada.');
+  }
+}
+
+export class IdempotencyConflictError extends DomainError {
+  constructor() {
+    super(
+      'IDEMPOTENCY_CONFLICT',
+      'A chave de idempotência já foi usada com outros dados.',
+    );
+  }
+}
+
+export class DuplicateWagerTransactionError extends DomainError {
+  constructor() {
+    super(
+      'DUPLICATE_TRANSACTION',
+      'Já existe uma transação com essa referência do provedor.',
+    );
+  }
+}
+
 export class NegativeBalanceError extends DomainError {
   constructor(walletId: string) {
     super(
@@ -41,6 +65,15 @@ export class InvalidInitialBalanceError extends DomainError {
 export class InvalidAmountError extends DomainError {
   constructor() {
     super('INVALID_AMOUNT', 'O valor deve ser positivo');
+  }
+}
+
+export class InvalidResultingBalanceError extends DomainError {
+  constructor() {
+    super(
+      'INVALID_RESULTING_BALANCE',
+      'O saldo resultante deve ser não negativo e usar a mesma moeda da transação.',
+    );
   }
 }
 

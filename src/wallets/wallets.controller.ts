@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { CreateWalletDto } from './dto/create-wallet.dto.js';
 import {
   WalletIdParamsDto,
@@ -13,12 +22,17 @@ import {
   type WalletLedgerResponse,
   type WalletQueryResponse,
 } from './wallet-query.service.js';
+import {
+  WalletReconciliationService,
+  type WalletReconciliationResponse,
+} from './wallet-reconciliation.service.js';
 
 @Controller('wallets')
 export class WalletsController {
   constructor(
     private readonly walletCreationService: WalletCreationService,
     private readonly walletQueryService: WalletQueryService,
+    private readonly walletReconciliationService: WalletReconciliationService,
   ) {}
 
   @Post()
@@ -37,5 +51,13 @@ export class WalletsController {
     @Query() query: WalletLedgerQueryDto,
   ): Promise<WalletLedgerResponse> {
     return this.walletQueryService.findLedger(params.walletId, query);
+  }
+
+  @Post(':walletId/reconciliation')
+  @HttpCode(HttpStatus.OK)
+  reconcile(
+    @Param() params: WalletIdParamsDto,
+  ): Promise<WalletReconciliationResponse> {
+    return this.walletReconciliationService.reconcile(params.walletId);
   }
 }

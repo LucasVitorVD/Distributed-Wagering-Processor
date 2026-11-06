@@ -309,6 +309,38 @@
           "comment": null,
           "enumItems": [],
           "mappedType": "string"
+        },
+        "resulting_balance_amount": {
+          "name": "resulting_balance_amount",
+          "type": "numeric(18,2)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 18,
+          "scale": 2,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "resulting_balance_currency": {
+          "name": "resulting_balance_currency",
+          "type": "varchar(3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 3,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "string"
         }
       },
       "name": "wager_transactions",
@@ -365,9 +397,21 @@
         },
         {
           "name": "chk_wager_provider_fields_by_kind",
-          "columnName": "round_id",
+          "columnName": "external_transaction_id",
           "definition": "CHECK (((((kind)::text = 'OPENING'::text) AND (provider_id IS NULL) AND (external_transaction_id IS NULL) AND (player_id IS NULL) AND (round_id IS NULL) AND (game_id IS NULL)) OR (((kind)::text <> 'OPENING'::text) AND (provider_id IS NOT NULL) AND (external_transaction_id IS NOT NULL) AND (player_id IS NOT NULL) AND (round_id IS NOT NULL) AND (game_id IS NOT NULL))))",
           "expression": "((kind = 'OPENING'::text) AND provider_id IS NULL) AND (external_transaction_id IS NULL) AND (player_id IS NULL) AND (round_id IS NULL) AND (game_id IS NULL)) OR (((kind <> 'OPENING'::text) AND (provider_id IS NOT NULL) AND (external_transaction_id IS NOT NULL) AND (player_id IS NOT NULL) AND (round_id IS NOT NULL) AND (game_id IS NOT NULL))"
+        },
+        {
+          "name": "chk_wager_result_balance_currency",
+          "columnName": "resulting_balance_currency",
+          "definition": "CHECK (((resulting_balance_currency)::text = (amount_currency)::text))",
+          "expression": "resulting_balance_currency = amount_currency"
+        },
+        {
+          "name": "chk_wager_result_balance_non_negative",
+          "columnName": "resulting_balance_amount",
+          "definition": "CHECK ((resulting_balance_amount >= (0)::numeric))",
+          "expression": "resulting_balance_amount >= 0"
         }
       ],
       "foreignKeys": {

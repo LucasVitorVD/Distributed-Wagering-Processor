@@ -106,6 +106,10 @@ describe('WagerTransaction', () => {
       expect(transaction.playerId).toBeUndefined();
       expect(transaction.roundId).toBeUndefined();
       expect(transaction.gameId).toBeUndefined();
+      expect(transaction.resultingBalance.toJSON()).toEqual({
+        amount: '25.00',
+        currency: 'BRL',
+      });
     });
 
     it('rejeita dados incompletos do provedor em transações externas', () => {
@@ -125,6 +129,19 @@ describe('WagerTransaction', () => {
           createdAt: new Date(),
         }),
       ).toThrow();
+    });
+
+    it('saves only a nonnegative result balance in the transaction currency', () => {
+      const transaction = WagerTransaction.create(createProps());
+
+      expect(() =>
+        transaction.recordResultingBalance(
+          Money.from({ amount: '1.00', currency: 'USD' }),
+        ),
+      ).toThrow('O saldo resultante deve ser não negativo');
+      expect(() =>
+        transaction.recordResultingBalance(Money.rehydrate('-1.00', 'BRL')),
+      ).toThrow('O saldo resultante deve ser não negativo');
     });
   });
 
@@ -308,6 +325,8 @@ describe('WagerTransaction', () => {
         kind: WagerTransactionKind.Refund,
         amountAmount: '25.00',
         amountCurrency: 'BRL',
+        resultingBalanceAmount: '75.00',
+        resultingBalanceCurrency: 'BRL',
         status: WagerTransactionStatus.Processed,
         idempotencyKey: 'idempotency-1',
         payloadHash: 'payload-hash-1',
@@ -332,6 +351,10 @@ describe('WagerTransaction', () => {
       expect(transaction.processedAt).toBe(processedAt);
       expect(transaction.amount.toJSON()).toEqual({
         amount: '25.00',
+        currency: 'BRL',
+      });
+      expect(transaction.resultingBalance.toJSON()).toEqual({
+        amount: '75.00',
         currency: 'BRL',
       });
     });

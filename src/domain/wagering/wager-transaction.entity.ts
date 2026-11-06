@@ -14,6 +14,7 @@ import { Wallet } from '../wallet/wallet.entity.js';
 import { WalletLedgerEntry } from '../ledger/wallet-ledger-entry.entity.js';
 import { type Currency, Money } from '../shared/money.js';
 import {
+  InvalidResultingBalanceError,
   InvalidAmountError,
   MissingProviderTransactionDataError,
   MissingTransactionReferenceError,
@@ -99,6 +100,8 @@ export type WagerTransactionState = {
   kind: WagerTransactionKind;
   amountAmount: string;
   amountCurrency: Currency;
+  resultingBalanceAmount: string;
+  resultingBalanceCurrency: Currency;
   status: WagerTransactionStatus;
   idempotencyKey: string;
   payloadHash: string;
@@ -119,6 +122,15 @@ export type WagerTransactionState = {
   name: 'chk_wager_provider_fields_by_kind',
   expression: (columns) =>
     `(${columns.kind} = 'OPENING' and ${columns.providerId} is null and ${columns.externalTransactionId} is null and ${columns.playerId} is null and ${columns.roundId} is null and ${columns.gameId} is null) or (${columns.kind} <> 'OPENING' and ${columns.providerId} is not null and ${columns.externalTransactionId} is not null and ${columns.playerId} is not null and ${columns.roundId} is not null and ${columns.gameId} is not null)`,
+})
+@Check({
+  name: 'chk_wager_result_balance_non_negative',
+  expression: (columns) => `${columns.resultingBalanceAmount} >= 0`,
+})
+@Check({
+  name: 'chk_wager_result_balance_currency',
+  expression: (columns) =>
+    `${columns.resultingBalanceCurrency} = ${columns.amountCurrency}`,
 })
 @Unique({
   name: 'uq_wager_transactions_provider_external',
@@ -147,6 +159,18 @@ export class WagerTransaction {
   @Property({ columnType: 'varchar(3)' })
   private amountCurrency!: Currency;
 
+  @Property({
+    columnType: 'numeric(18,2)',
+    fieldName: 'resulting_balance_amount',
+  })
+  private resultingBalanceAmount!: string;
+
+  @Property({
+    columnType: 'varchar(3)',
+    fieldName: 'resulting_balance_currency',
+  })
+  private resultingBalanceCurrency!: Currency;
+
   @Property({ columnType: 'varchar(30)', fieldName: 'status' })
   private _status!: WagerTransactionStatus;
 
@@ -161,7 +185,7 @@ export class WagerTransaction {
     nullable: true,
     fieldName: 'reference_external_transaction_id',
   })
-  private _referenceExternalTransactionId?: string;
+  public readonly referenceExternalTransactionId?: string;
 
   @Property({
     type: 'uuid',
@@ -229,7 +253,7 @@ export class WagerTransaction {
     this._status = state.status;
     this.idempotencyKey = props.idempotencyKey;
     this.payloadHash = props.payloadHash;
-    this._referenceExternalTransactionId =
+    this.referenceExternalTransactionId =
       props.referenceExternalTransactionId ?? undefined;
     this._referenceTransactionId = state.referenceTransactionId ?? undefined;
     this.createdAt = props.createdAt;
@@ -286,7 +310,7 @@ export class WagerTransaction {
       throw new InvalidAmountError();
     }
 
-    return new WagerTransaction(
+    const transaction = new WagerTransaction(
       {
         ...props,
         kind: WagerTransactionKind.Opening,
@@ -299,10 +323,12 @@ export class WagerTransaction {
         failureCode: null,
       },
     );
+    transaction.recordResultingBalance(props.amount);
+    return transaction;
   }
 
   static rehydrate(state: WagerTransactionState): WagerTransaction {
-    return new WagerTransaction(
+    const transaction = new WagerTransaction(
       {
         id: state.id,
         wallet: state.wallet,
@@ -327,6 +353,22 @@ export class WagerTransaction {
         failureCode: state.failureCode,
       },
     );
+    transaction.recordResultingBalance(
+      Money.rehydrate(
+        state.resultingBalanceAmount,
+        state.resultingBalanceCurrency,
+      ),
+    );
+    return transaction;
+  }
+
+  recordResultingBalance(balance: Money): void {
+    if (balance.currency !== this.amountCurrency || balance.isNegative()) {
+      throw new InvalidResultingBalanceError();
+    }
+
+    this.resultingBalanceAmount = balance.toJSON().amount;
+    this.resultingBalanceCurrency = balance.currency;
   }
 
   markProcessed(referenceTransactionId: string | undefined, at: Date): void {
@@ -439,16 +481,19 @@ export class WagerTransaction {
     return Money.rehydrate(this.amountAmount, this.amountCurrency);
   }
 
+  get resultingBalance(): Money {
+    return Money.rehydrate(
+      this.resultingBalanceAmount,
+      this.resultingBalanceCurrency,
+    );
+  }
+
   get status(): WagerTransactionStatus {
     return this._status;
   }
 
   get referenceTransactionId(): string | undefined {
     return this._referenceTransactionId;
-  }
-
-  get referenceExternalTransactionId(): string | undefined {
-    return this._referenceExternalTransactionId;
   }
 
   get failureCode(): FailureCode | undefined {
