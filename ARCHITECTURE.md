@@ -45,10 +45,11 @@ Serviço síncrono de processamento de transações de apostas (wagering) para c
 
 ## Autenticação (decisão da seção 2)
 
-- Não implementada. O desafio deixa a cargo do candidato e afirma que não vale pontos.
+- Não implementada no MVP. O desafio deixa a cargo do candidato e afirma que não vale pontos na tabela de avaliação.
 - Não há tabela própria de usuários nem hash de senha (evitar autenticação artesanal).
-- Ponto de extensão deixado explícito: `AuthGuard` no-op / `ProviderIdentityPort` a ser implementado com um IdP externo (Keycloak/Zitadel) quando necessário.
-- Endpoints de health ficam abertos, conforme especificado.
+- **Desenho de onde se encaixaria:** um `AuthGuard` no-op (classe pronta para ser substituída) aplicado nas rotas de negócio (`POST /wallets`, `GET /wallets/:walletId`, `GET /wallets/:walletId/ledger`, `POST /wagering/transactions`, `GET /wagering/transactions/:transactionId`, `GET /providers/:providerId/wagering/transactions/:externalTransactionId`, `POST /wallets/:walletId/reconciliation`). Os endpoints de health (`/health/live`, `/health/ready`) e métricas ficam abertos, conforme especificado.
+- Quando o time decidir integrar um Identity Provider externo (Keycloak, Zitadel ou equivalente OIDC), basta substituir a implementação de `canActivate` do guard pela validação do token do provedor e injetar a identidade do provedor no contexto da requisição (ex.: `providerId` vindos do token, não do corpo da requisição), para então aplicar autorização/escopo por provedor e propriedade de carteira.
+- O ponto de extensão está explícito: `AuthGuard` no-op / `ProviderIdentityPort` a ser implementado.
 
 ## Eventos e outbox
 
