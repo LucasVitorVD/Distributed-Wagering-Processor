@@ -107,16 +107,21 @@ export class CreateWagerTransactionDto {
   })
   playerId!: string;
 
+  @IsUUID(undefined, {
+    message: 'O campo walletId deve ser um UUID válido.',
+  })
+  walletId!: string;
+
   @IsString({ message: 'O campo roundId deve ser um texto.' })
   @Length(1, 255, {
-    message: 'O campo roundId deve ter entre 1 e 255 caracteres.',
+    message: 'O campo roundId não pode ser vazio.'
   })
   @Matches(/\S/, { message: 'O campo roundId não pode ser vazio.' })
   roundId!: string;
 
   @IsString({ message: 'O campo gameId deve ser um texto.' })
   @Length(1, 255, {
-    message: 'O campo gameId deve ter entre 1 e 255 caracteres.',
+    message: 'O campo gameId não pode ser vazio.'
   })
   @Matches(/\S/, { message: 'O campo gameId não pode ser vazio.' })
   gameId!: string;
@@ -129,15 +134,15 @@ export class CreateWagerTransactionDto {
       WagerTransactionKind.Refund,
       WagerTransactionKind.Rollback,
     ],
-    { message: 'O tipo de transação não é aceito.' },
+    { message: 'O tipo de transação não é aceito.' }
   )
   @Validate(TransactionReferenceConstraint)
   kind!: WagerTransactionKind;
 
-  @IsDefined({ message: 'O campo amount é obrigatório.' })
+  @IsDefined({ message: 'O campo money é obrigatório.' })
   @ValidateNested()
   @Type(() => WagerTransactionAmountDto)
-  amount!: WagerTransactionAmountDto;
+  money!: WagerTransactionAmountDto;
 
   @Allow()
   referenceExternalTransactionId?: string;

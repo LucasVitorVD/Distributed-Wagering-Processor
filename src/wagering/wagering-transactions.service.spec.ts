@@ -28,9 +28,9 @@ describe('WageringTransactionsService', () => {
     const repositories: WageringRepositories = {
       wallets: {
         findById: async () => null,
-        findByIdForUpdate: async () => null,
+        findByIdForUpdate: async () => wallet,
         findByPlayerAndCurrency: async () => null,
-        findByPlayerAndCurrencyForUpdate: async () => wallet,
+        findByPlayerAndCurrencyForUpdate: async () => null,
         save: (savedWallet) => savedWallets.push(savedWallet),
       },
       wagerTransactions: {
@@ -65,10 +65,11 @@ describe('WageringTransactionsService', () => {
       providerId: 'provider-1',
       externalTransactionId: 'external-1',
       playerId,
+      walletId: wallet.id,
       roundId: 'round-1',
       gameId: 'game-1',
       kind: WagerTransactionKind.Bet,
-      amount: { amount: '5', currency: 'BRL' },
+      money: { amount: '5', currency: 'BRL' },
     });
 
     const canonicalPayload =

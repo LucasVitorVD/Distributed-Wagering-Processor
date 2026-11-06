@@ -128,7 +128,7 @@ export class WageringTransactionsService {
   ): Promise<WagerTransactionWriteResponse> {
     this.validateIdempotencyKey(idempotencyKey);
     const key = idempotencyKey;
-    const money = Money.from(request.amount);
+    const money = Money.from(request.money);
     const payload = this.toCanonicalPayload(request, money);
     const payloadHash = createHash('sha256')
       .update(this.canonicalJson(payload), 'utf8')
@@ -162,11 +162,11 @@ export class WageringTransactionsService {
           }
 
           const wallet =
-            await repositories.wallets.findByPlayerAndCurrencyForUpdate(
-              request.playerId,
-              'BRL',
-            );
+            await repositories.wallets.findByIdForUpdate(request.walletId);
           if (!wallet) {
+            throw new WalletNotFoundError();
+          }
+          if (wallet.playerId !== request.playerId) {
             throw new WalletNotFoundError();
           }
           walletId = wallet.id;

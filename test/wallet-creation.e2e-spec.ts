@@ -15,6 +15,7 @@ import { InvalidAmountError } from '../src/domain/shared/errors.js';
 import { WalletsController } from '../src/wallets/wallets.controller.js';
 import { WalletCreationService } from '../src/wallets/wallet-creation.service.js';
 import { WalletQueryService } from '../src/wallets/wallet-query.service.js';
+import { WalletReconciliationService } from '../src/wallets/wallet-reconciliation.service.js';
 
 describe('POST /wallets', () => {
   let app: Awaited<ReturnType<TestingModule['createNestApplication']>>;
@@ -25,6 +26,9 @@ describe('POST /wallets', () => {
     findWallet: vi.fn(),
     findLedger: vi.fn(),
   };
+  const reconciliationService = {
+    reconcile: vi.fn(),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -32,6 +36,7 @@ describe('POST /wallets', () => {
       providers: [
         { provide: WalletCreationService, useValue: service },
         { provide: WalletQueryService, useValue: queryService },
+        { provide: WalletReconciliationService, useValue: reconciliationService },
       ],
     }).compile();
 
@@ -58,6 +63,14 @@ describe('POST /wallets', () => {
       items: [],
       nextCursor: null,
       limit: 50,
+    });
+    reconciliationService.reconcile.mockResolvedValue({
+      walletId: 'c04e4200-3f21-4c87-94f1-0e50032cc554',
+      storedBalance: { amount: '25.50', currency: 'BRL' },
+      calculatedBalance: { amount: '25.50', currency: 'BRL' },
+      difference: { amount: '0.00', currency: 'BRL' },
+      consistent: true,
+      checkedEntries: 0,
     });
   });
 

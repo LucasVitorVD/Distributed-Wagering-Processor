@@ -77,16 +77,18 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   function transactionBody(
     playerId: string,
+    walletId: string,
     overrides: Record<string, unknown> = {},
   ) {
     return {
       providerId: 'provider-test',
       externalTransactionId: randomUUID(),
       playerId,
+      walletId,
       roundId: 'round-1',
       gameId: 'game-1',
       kind: 'BET',
-      amount: { amount: '10', currency: 'BRL' },
+      money: { amount: '10', currency: 'BRL' },
       ...overrides,
     };
   }
@@ -104,7 +106,7 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('processes a bet once and returns the same public representation from both GETs', async () => {
     const { playerId, walletId } = await createWallet('25.00');
-    const body = transactionBody(playerId);
+    const body = transactionBody(playerId, walletId);
     const key = `provider-test:${body.externalTransactionId}`;
 
     const created = await postTransaction(body, key);
@@ -118,7 +120,7 @@ describe('wagering transaction API with PostgreSQL', () => {
     });
 
     const replay = await postTransaction(
-      { ...body, amount: { amount: '10.00', currency: 'BRL' } },
+      { ...body, money: { amount: '10.00', currency: 'BRL' } },
       key,
     );
     expect(replay.status).toBe(200);
@@ -159,8 +161,8 @@ describe('wagering transaction API with PostgreSQL', () => {
       amount: { amount: '10.00', currency: 'BRL' },
     });
 
-    const laterBody = transactionBody(playerId, {
-      amount: { amount: '2.00', currency: 'BRL' },
+    const laterBody = transactionBody(playerId, walletId, {
+      money: { amount: '2.00', currency: 'BRL' },
     });
     const later = await postTransaction(laterBody, idempotencyKey('later-bet'));
     expect(later.body.balance).toEqual({ amount: '13.00', currency: 'BRL' });
@@ -175,8 +177,8 @@ describe('wagering transaction API with PostgreSQL', () => {
   });
 
   it('returns conflicts for a changed payload or duplicate provider identity', async () => {
-    const { playerId } = await createWallet('50.00');
-    const body = transactionBody(playerId);
+    const { playerId, walletId } = await createWallet('50.00');
+    const body = transactionBody(playerId, walletId);
     const key = idempotencyKey('first-key');
     const created = await postTransaction(body, key);
     expect(created.status).toBe(200);
@@ -215,7 +217,7 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('persists insufficient balance as a rejection without a ledger entry', async () => {
     const { playerId, walletId } = await createWallet();
-    const body = transactionBody(playerId);
+    const body = transactionBody(playerId, walletId);
     const key = idempotencyKey('insufficient-balance-key');
     const response = await postTransaction(body, key);
 
@@ -248,18 +250,18 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('credits WIN transactions and records LOSS without changing the balance', async () => {
     const { playerId, walletId } = await createWallet('10.00');
-    const winBody = transactionBody(playerId, {
+    const winBody = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'WIN',
-      amount: { amount: '2.50', currency: 'BRL' },
+      money: { amount: '2.50', currency: 'BRL' },
     });
     const win = await postTransaction(winBody, idempotencyKey('win-key'));
     expect(win.body.status).toBe('PROCESSED');
 
-    const rollbackWinBody = transactionBody(playerId, {
+    const rollbackWinBody = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'ROLLBACK',
-      amount: { amount: '2.50', currency: 'BRL' },
+      money: { amount: '2.50', currency: 'BRL' },
       referenceExternalTransactionId: winBody.externalTransactionId,
     });
     const rollbackWin = await postTransaction(
@@ -268,25 +270,25 @@ describe('wagering transaction API with PostgreSQL', () => {
     );
     expect(rollbackWin.body.status).toBe('PROCESSED');
 
-    const lossBody = transactionBody(playerId, {
+    const lossBody = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'LOSS',
-      amount: { amount: '4.00', currency: 'BRL' },
+      money: { amount: '4.00', currency: 'BRL' },
     });
     const loss = await postTransaction(lossBody, idempotencyKey('loss-key'));
     expect(loss.body.status).toBe('PROCESSED');
 
-    const betBody = transactionBody(playerId, {
+    const betBody = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
-      amount: { amount: '1.50', currency: 'BRL' },
+      money: { amount: '1.50', currency: 'BRL' },
     });
     const bet = await postTransaction(betBody, idempotencyKey('bet-key'));
     expect(bet.body.status).toBe('PROCESSED');
 
-    const rollbackBetBody = transactionBody(playerId, {
+    const rollbackBetBody = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'ROLLBACK',
-      amount: { amount: '1.50', currency: 'BRL' },
+      money: { amount: '1.50', currency: 'BRL' },
       referenceExternalTransactionId: betBody.externalTransactionId,
     });
     const rollbackBet = await postTransaction(
@@ -315,8 +317,8 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('replays concurrent matching requests without applying effects twice', async () => {
     const { playerId, walletId } = await createWallet('10.00');
-    const body = transactionBody(playerId, {
-      amount: { amount: '2.00', currency: 'BRL' },
+    const body = transactionBody(playerId, walletId, {
+      money: { amount: '2.00', currency: 'BRL' },
     });
     const key = idempotencyKey('concurrent-bet');
 
@@ -346,8 +348,8 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('conflicts when concurrent requests reuse a key with different payloads', async () => {
     const { playerId, walletId } = await createWallet('10.00');
-    const firstBody = transactionBody(playerId, {
-      amount: { amount: '2.00', currency: 'BRL' },
+    const firstBody = transactionBody(playerId, walletId, {
+      money: { amount: '2.00', currency: 'BRL' },
     });
     const secondBody = { ...firstBody, roundId: 'different-round' };
     const key = idempotencyKey('concurrent-conflict');
@@ -377,16 +379,16 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('enforces refund limits and restores allowance when a refund is rolled back', async () => {
     const { playerId, walletId } = await createWallet('100.00');
-    const betBody = transactionBody(playerId, {
-      amount: { amount: '20.00', currency: 'BRL' },
+    const betBody = transactionBody(playerId, walletId, {
+      money: { amount: '20.00', currency: 'BRL' },
     });
     const bet = await postTransaction(betBody, idempotencyKey('bet-key'));
     expect(bet.body.status).toBe('PROCESSED');
 
-    const refundBody = transactionBody(playerId, {
+    const refundBody = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'REFUND',
-      amount: { amount: '5.00', currency: 'BRL' },
+      money: { amount: '5.00', currency: 'BRL' },
       referenceExternalTransactionId: betBody.externalTransactionId,
     });
     const refund = await postTransaction(
@@ -402,10 +404,10 @@ describe('wagering transaction API with PostgreSQL', () => {
       bet.body.transactionId,
     );
 
-    const excessiveRefund = transactionBody(playerId, {
+    const excessiveRefund = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'REFUND',
-      amount: { amount: '16.00', currency: 'BRL' },
+      money: { amount: '16.00', currency: 'BRL' },
       referenceExternalTransactionId: betBody.externalTransactionId,
     });
     const rejectedRefund = await postTransaction(
@@ -418,10 +420,10 @@ describe('wagering transaction API with PostgreSQL', () => {
     );
     expect(rejectedRefundLookup.body.failureCode).toBe('INVALID_REFERENCE');
 
-    const rollbackRefund = transactionBody(playerId, {
+    const rollbackRefund = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'ROLLBACK',
-      amount: { amount: '5.00', currency: 'BRL' },
+      money: { amount: '5.00', currency: 'BRL' },
       referenceExternalTransactionId: refundBody.externalTransactionId,
     });
     const rollback = await postTransaction(
@@ -430,10 +432,10 @@ describe('wagering transaction API with PostgreSQL', () => {
     );
     expect(rollback.body.status).toBe('PROCESSED');
 
-    const remainingRefund = transactionBody(playerId, {
+    const remainingRefund = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'REFUND',
-      amount: { amount: '20.00', currency: 'BRL' },
+      money: { amount: '20.00', currency: 'BRL' },
       referenceExternalTransactionId: betBody.externalTransactionId,
     });
     const finalRefund = await postTransaction(
@@ -442,10 +444,10 @@ describe('wagering transaction API with PostgreSQL', () => {
     );
     expect(finalRefund.body.status).toBe('PROCESSED');
 
-    const rollbackBet = transactionBody(playerId, {
+    const rollbackBet = transactionBody(playerId, walletId, {
       externalTransactionId: randomUUID(),
       kind: 'ROLLBACK',
-      amount: { amount: '20.00', currency: 'BRL' },
+      money: { amount: '20.00', currency: 'BRL' },
       referenceExternalTransactionId: betBody.externalTransactionId,
     });
     const rejectedRollback = await postTransaction(
@@ -468,8 +470,8 @@ describe('wagering transaction API with PostgreSQL', () => {
   });
 
   it('validates keys, references, extra fields, and lookup IDs', async () => {
-    const { playerId } = await createWallet('10.00');
-    const body = transactionBody(playerId);
+    const { playerId, walletId } = await createWallet('10.00');
+    const body = transactionBody(playerId, walletId);
 
     const missingKey = await request(app.getHttpServer())
       .post('/wagering/transactions')
@@ -510,27 +512,22 @@ describe('wagering transaction API with PostgreSQL', () => {
 
   it('does not reserve the key when the wallet does not exist', async () => {
     const playerId = randomUUID();
-    const body = transactionBody(playerId);
+    const body = transactionBody(playerId, randomUUID());
     const key = idempotencyKey('missing-wallet-key');
 
     const notFound = await postTransaction(body, key);
     expect(notFound.status).toBe(404);
     expect(notFound.body.code).toBe('WALLET_NOT_FOUND');
 
-    await createWalletForPlayer(playerId);
+    const createdWallet = await request(app.getHttpServer())
+      .post('/wallets')
+      .send({ playerId, initialBalance: { amount: '0', currency: 'BRL' } });
+    expect(createdWallet.status).toBe(201);
+    body.walletId = createdWallet.body.id;
+
     const created = await postTransaction(body, key);
     expect(created.status).toBe(200);
     expect(created.body.status).toBe('REJECTED');
     expect(created.body.idempotentReplay).toBe(false);
   });
-
-  async function createWalletForPlayer(playerId: string): Promise<void> {
-    const response = await request(app.getHttpServer())
-      .post('/wallets')
-      .send({
-        playerId,
-        initialBalance: { amount: '0', currency: 'BRL' },
-      });
-    expect(response.status).toBe(201);
-  }
 });
